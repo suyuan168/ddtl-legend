@@ -8,11 +8,11 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RAW = join(ROOT, 'art/raw'); const OUT = join(ROOT, 'ddres/Data');
 // 物品名 → 图标（物品名暂用现有物品表的名字，改名时这里一起改）
 const MAP = {
-  '金创药(小量)': 'it_hp_s', '金创药(中量)': 'it_hp_m', '强效金创药': 'it_hp_m',
-  '魔法药(小量)': 'it_mp_s', '魔法药(中量)': 'it_mp_m', '强效魔法药': 'it_mp_m',
-  '木剑': 'it_sword_wood', '青铜剑': 'it_sword_bronze', '铁剑': 'it_sword_iron', '短剑': 'it_sword_bronze',
-  '布衣(男)': 'it_armor_cloth', '布衣(女)': 'it_armor_cloth', '青铜头盔': 'it_helmet_bronze',
-  '乌木剑': 'it_staff', '回城卷': 'it_scroll', '随机传送卷': 'it_scroll',
+  '小回血药': 'it_hp_s', '中回血药': 'it_hp_m', '大回血药': 'it_hp_m',
+  '小回魔药': 'it_mp_s', '中回魔药': 'it_mp_m', '大回魔药': 'it_mp_m',
+  '练习木剑': 'it_sword_wood', '青铜短剑': 'it_sword_bronze', '精铁长剑': 'it_sword_iron', '猎刀': 'it_sword_bronze',
+  '粗布衣(男)': 'it_armor_cloth', '粗布衣(女)': 'it_armor_cloth', '青铜盔': 'it_helmet_bronze',
+  '乌木杖': 'it_staff', '回城卷': 'it_scroll', '随机传送卷': 'it_scroll',
 };
 const rows = readFileSync(join(ROOT, 'gamedata/mud2/DB/StdItems.csv'), 'utf8').split(/\r?\n/).slice(1).map((l) => l.split(','));
 const looksOf = {}; for (const r of rows) if (r[1]) looksOf[r[1]] = Number(r[8]);

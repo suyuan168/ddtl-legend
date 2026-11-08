@@ -17,7 +17,7 @@
 | NPC | `Envir/Npcs.txt`、`Npc_Def/`、`Market_Def/` | 61 / 24 | 主城约 8 个（商店、回收、仓库、传送、技能书、强化） |
 | 任务、公告、攻城 | `MapQuest*`、`Notice/`、`Castle/` | — | 第一版清空，公告改成我们的 |
 
-- 名字对照表放 `data/names.csv`（原名,新名,类别），由脚本生成上面这些文件。
+- 名字对照表放 `gamedata/names.csv`（原名,新名,类别），由脚本生成上面这些文件。
 - 数值（攻防、血量、经验、掉率）沿用。
 - `MapInfo.txt` 等是 GBK 编码，脚本统一读写 GBK。
 

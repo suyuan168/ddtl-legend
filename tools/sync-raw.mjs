@@ -12,8 +12,10 @@ function nameOf(b) {
   while (p < b.length - 12) { const len = b.readUInt32BE(p); const t = b.toString('ascii', p + 4, p + 8); if (t === 'tEXt') { const [k, v] = b.toString('latin1', p + 8, p + 8 + len).split('\0'); if (k === 'ddname') return v; } if (t === 'IDAT') return null; p += 12 + len; }
   return null;
 }
+const skip = new Set(existsSync(join(ROOT, 'art/raw-skip.txt')) ? readFileSync(join(ROOT, 'art/raw-skip.txt'), 'utf8').split(/\r?\n/).filter((l) => l && !l.startsWith('#')) : []);
 let n = 0;
 for (const f of readdirSync(IN).filter((x) => parseInt(x) >= from).sort()) {
+  if (skip.has(f)) continue;
   const src = join(IN, f); const b = readFileSync(src); if (b.toString('ascii', 1, 4) !== 'PNG' || b.readUInt32BE(16) < 8) continue;
   const name = nameOf(b); if (!name) continue; const dst = join(OUT, name + '.png');
   if (existsSync(dst) && statSync(dst).mtimeMs >= statSync(src).mtimeMs) continue;
