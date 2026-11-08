@@ -114,3 +114,18 @@ for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) {
 }
 for (const d of MAPS) { mkdirSync(d, { recursive: true }); writeFileSync(join(d, MAP_ID + '.map'), buf); }
 console.log('地图', MAP_ID, W + 'x' + H, '物件格', objAt.filter((v) => v >= 0).length, '阻挡格', block.reduce((a, b) => a + b, 0));
+
+// —— 小地图：整张地图（地面 + 物件）按 1/8 缩小成一张 JPG，客户端照着裁一块显示
+{
+  const FW = W * 48; const FH = H * 32; const full = Buffer.alloc(FW * FH * 3);
+  for (let ty = 0; ty < H / 2; ty++) for (let tx = 0; tx < W / 2; tx++) {
+    const t = tileImgs[bngIdx[ty][tx]];
+    for (let y = 0; y < TH; y++) t.copy(full, ((ty * TH + y) * FW + tx * TW) * 3, y * TW * 3, (y + 1) * TW * 3);
+  }
+  const comps = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const o = objAt[y * W + x]; if (o < 0) continue; const s = stripImgs[o]; const top = y * 32 + 32 - s.h; if (top < 0) continue; comps.push({ input: s.buf, left: x * 48, top }); }
+  const SC = 8;
+  const img = await sharp(full, { raw: { width: FW, height: FH, channels: 3 } }).composite(comps).png().toBuffer();
+  await sharp(img).resize(Math.round(FW / SC), Math.round(FH / SC), { kernel: 'lanczos3' }).modulate({ brightness: 1.08, saturation: 1.1 }).jpeg({ quality: 85 }).toFile(join(DATA, 'minimap_' + MAP_ID + '.jpg'));
+  console.log('小地图', Math.round(FW / SC) + 'x' + Math.round(FH / SC));
+}

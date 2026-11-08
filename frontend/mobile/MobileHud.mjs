@@ -64,6 +64,10 @@ function liquid(ctx, cx, cy, r, k, kind, now, side) {
     const tex = UI[kind === 'red' ? 'hud_orb_red' : 'hud_orb_blue'];
     if (tex) ctx.drawImage(tex, cx - r, cy - r, r * 2, r * 2);
     else { const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.35, r * 0.1, cx, cy, r); if (kind === 'red') { g.addColorStop(0, '#ff7a5a'); g.addColorStop(0.5, '#b8160e'); g.addColorStop(1, '#3a0404'); } else { g.addColorStop(0, '#7ab0ff'); g.addColorStop(0.5, '#1a46c8'); g.addColorStop(1, '#040c3a'); } ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r * 2); }
+    // 液面亮线 + 往上冒的小气泡，看得出“还剩多少药”
+    if (k > 0.02 && k < 0.99) { ctx.strokeStyle = kind === 'red' ? 'rgba(255,190,170,.75)' : 'rgba(190,215,255,.75)'; ctx.lineWidth = 1.5; ctx.beginPath(); for (let x = -r; x <= r; x += 4) { const yy = top + Math.sin(x / 9 + now / 300) * 1.6 + wob * (x / r); if (x === -r) ctx.moveTo(cx + x, yy); else ctx.lineTo(cx + x, yy); } ctx.stroke(); }
+    ctx.fillStyle = kind === 'red' ? 'rgba(255,200,180,.5)' : 'rgba(200,225,255,.5)';
+    for (let i = 0; i < 5; i++) { const t = ((now / 1600 + i * 0.37 + (kind === 'red' ? 0 : 0.5)) % 1); const bx = cx + side * r * (0.25 + 0.5 * ((i * 0.618) % 1)); const by = cy + r - t * (cy + r - top); if (by > top + 3) { ctx.beginPath(); ctx.arc(bx, by, 1.2 + (i % 2), 0, Math.PI * 2); ctx.fill(); } }
     ctx.restore();
 }
 function orb(ctx, cx, cy, r, k, kind, now) {
@@ -295,8 +299,7 @@ export class MobileHud {
         // —— 血蓝合一的球 + 两侧小按钮
         const r = 54; const ocx = 330; const ocy = H - 26 - r;
         splitOrb(ctx, ocx, ocy, r, (p.hp || 0) / (p.maxHp || 1), (p.mp || 0) / (p.maxMp || 1), now);
-        ctx.font = 'bold 11px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000';
-        for (const [x, t, c] of [[ocx - r * 0.45, String(p.hp || 0), '#ffd0c8'], [ocx + r * 0.45, String(p.mp || 0), '#c8dcff']]) { ctx.strokeText(t, x, ocy + 2); ctx.fillStyle = c; ctx.fillText(t, x, ocy + 2); }
+        // 球里不写数字，只看液面；具体数值在底部状态栏
         // —— 快捷格（药水等，点了就用）+ 下面聊天框
         this._quickSlots(ctx, p);
         this._chat(ctx);
@@ -341,7 +344,8 @@ export class MobileHud {
         ctx.fillText(hh, 14, y + 11); ctx.fillText((p.level || 1) + '级', 80, y + 11);
         const ex = (p.exp || 0) / (p.maxExp || 1e9);
         ctx.fillText('经验', 140, y + 11); bar(ctx, 172, y + 6, 220, 10, ex, '#ffd86a', '#a8741a'); ctx.fillStyle = '#ffe27a'; ctx.fillText((ex * 100).toFixed(1) + '%', 400, y + 11);
-        ctx.textAlign = 'right'; ctx.fillStyle = '#c8dcff'; ctx.fillText('魔法 ' + (p.mp || 0), W - 200, y + 11);
+        ctx.textAlign = 'right'; ctx.fillStyle = '#ffb0a8'; ctx.fillText('生命 ' + (p.hp || 0) + '/' + (p.maxHp || 0), W - 290, y + 11);
+        ctx.fillStyle = '#c8dcff'; ctx.fillText('魔法 ' + (p.mp || 0) + '/' + (p.maxMp || 0), W - 190, y + 11);
         ctx.fillStyle = '#ffe27a'; ctx.fillText('金币 ' + (p.gold || 0), W - 90, y + 11);
         ctx.fillStyle = '#e8dcc0'; ctx.fillText('攻击 ' + (p.dc || '-'), W - 14, y + 11);
     }
@@ -374,23 +378,41 @@ export class MobileHud {
         });
     }
 
+    // 小地图：用生成地图时缩小画好的整图（每格 6×4 像素），以自己为中心裁一块；顶上地图名，底下坐标
     _miniMap(ctx, x, y, w, h) {
         const s = this.scene; const m = s.mapActor && s.mapActor.map; if (!m) return;
-        frame(ctx, x, y, w, h + 20, 6);
-        if (!this._mm || this._mmMap !== m) {
-            const c = document.createElement('canvas'); c.width = m.width; c.height = m.height; const g = c.getContext('2d'); const img = g.createImageData(m.width, m.height);
-            for (let gx = 0; gx < m.width; gx++) for (let gy = 0; gy < m.height; gy++) { const t = m.tiles[gx][gy]; const o = (gy * m.width + gx) * 4; const v = t.canStand ? (t.obj >= 0 ? 70 : 110) : 40; img.data[o] = v * 0.9; img.data[o + 1] = v; img.data[o + 2] = v * 0.7; img.data[o + 3] = 255; }
-            g.putImageData(img, 0, 0); this._mm = c; this._mmMap = m;
-        }
-        const p = s.self; const sc = 2; const vw = (w - 8) / sc; const vh = (h - 8) / sc;
-        const sx0 = Math.max(0, Math.min(m.width - vw, p.x - vw / 2)); const sy0 = Math.max(0, Math.min(m.height - vh, p.y - vh / 2));
-        ctx.imageSmoothingEnabled = false; ctx.drawImage(this._mm, sx0, sy0, vw, vh, x + 4, y + 4, w - 8, h - 8);
+        const id = s.mapActor.mapId;
+        if (this._mmId !== id) { this._mmId = id; this._mmImg = null; const im = new Image(); im.onload = () => { if (this._mmId === id) this._mmImg = im; }; im.src = '/resources/Data/minimap_' + id + '.jpg'; }
+        const p = s.self; const CW = 6; const CH = 4; const hh = 20;
+        // 外框
+        rr(ctx, x - 3, y - 3, w + 6, h + hh * 2 + 6, 8); ctx.fillStyle = '#16110b'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = IRON; ctx.stroke();
+        rr(ctx, x - 1, y - 1, w + 2, h + hh * 2 + 2, 7); ctx.lineWidth = 1.5; ctx.strokeStyle = GOLD; ctx.stroke();
+        // 地图名
+        const name = (s.snapshot && s.snapshot.map && (s.snapshot.map.title || s.snapshot.map.name)) || '';
+        ctx.font = 'bold 13px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = GOLD_HI; ctx.fillText(name, x + w / 2, y + hh / 2 + 1);
+        const my = y + hh;
+        ctx.save(); rr(ctx, x + 2, my, w - 4, h, 4); ctx.clip();
+        const vw = (w - 4) / CW; const vh = h / CH; // 能看到多少格
+        const fx = this._viewX != null ? s._viewX : p.x; const fy = s._viewY != null ? s._viewY : p.y;
+        const sx0 = Math.max(0, Math.min(m.width - vw, (s._viewX ?? p.x) - vw / 2)); const sy0 = Math.max(0, Math.min(m.height - vh, (s._viewY ?? p.y) - vh / 2));
+        if (this._mmImg) { ctx.imageSmoothingEnabled = true; ctx.drawImage(this._mmImg, sx0 * CW, sy0 * CH, vw * CW, vh * CH, x + 2, my, w - 4, h); }
+        else { ctx.fillStyle = '#2a3018'; ctx.fillRect(x + 2, my, w - 4, h); }
+        // 怪、NPC、其他玩家
         for (const e of s.entities.values()) {
-            const ex = x + 4 + (e.x - sx0) * sc; const ey = y + 4 + (e.y - sy0) * sc; if (ex < x + 4 || ey < y + 4 || ex > x + w - 4 || ey > y + h - 4) continue;
-            ctx.fillStyle = e.id === p.id ? '#ffe27a' : e.type === 'monster' ? '#ff5a4a' : e.type === 'npc' ? '#5ae87a' : '#7ab8ff';
-            ctx.fillRect(ex - 1.5, ey - 1.5, 3, 3);
+            if (e.id === p.id) continue;
+            const ex = x + 2 + (e.x - sx0) * CW + CW / 2; const ey = my + (e.y - sy0) * CH + CH / 2;
+            ctx.beginPath(); ctx.arc(ex, ey, e.type === 'monster' ? 2.2 : 3, 0, Math.PI * 2);
+            ctx.fillStyle = e.type === 'monster' ? '#ff4a3a' : e.type === 'npc' ? '#5ae87a' : '#5ab0ff'; ctx.fill();
+            ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.stroke();
         }
-        ctx.font = '12px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f0e2c0';
-        ctx.fillText((s.snapshot && s.snapshot.map && (s.snapshot.map.title || s.snapshot.map.name) || '') + '  ' + p.x + ',' + p.y, x + w / 2, y + h + 10);
+        // 自己：带朝向的金色箭头
+        const px = x + 2 + ((s._viewX ?? p.x) - sx0) * CW + CW / 2; const py = my + ((s._viewY ?? p.y) - sy0) * CH + CH / 2;
+        const ang = [-90, -45, 0, 45, 90, 135, 180, -135][p.dir || 0] * Math.PI / 180;
+        ctx.save(); ctx.translate(px, py); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -5); ctx.lineTo(-2, 0); ctx.lineTo(-5, 5); ctx.closePath();
+        ctx.fillStyle = '#ffd84a'; ctx.fill(); ctx.lineWidth = 1.2; ctx.strokeStyle = '#3a2000'; ctx.stroke(); ctx.restore();
+        ctx.restore();
+        // 坐标
+        ctx.font = '12px "Microsoft YaHei",sans-serif'; ctx.fillStyle = '#e8dcc0'; ctx.textAlign = 'center';
+        ctx.fillText(p.x + ' , ' + p.y, x + w / 2, my + h + hh / 2);
     }
 }
