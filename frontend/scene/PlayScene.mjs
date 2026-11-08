@@ -255,96 +255,81 @@ export class PlayScene extends Scene {
 
         // HUD 根容器：覆盖整个 800×600，子元素绝对定位；默认不拦截鼠标
         const root = document.createElement('div');
-        root.style.cssText = 'position:absolute;left:0;top:0;width:800px;height:600px;pointer-events:none;'
-            + 'font-family:SimSun,serif;color:#fff;';
+        // 打到天亮：版式照 JootM2 原版底板（800 宽），屏幕更宽时居中；美术换成我们的东方风拼件
+        const HUD_OX = Math.round((SCREEN_WIDTH - 800) / 2);
+        root.style.cssText = 'position:absolute;left:' + HUD_OX + 'px;top:0;width:800px;height:600px;pointer-events:none;'
+            + 'font-family:"DDSerif","Microsoft YaHei",serif;color:#fff;';
         this.hudEl = root;
         gui.appendChild(root);
 
-        // 底板 Prguse[1]（800×251）
-        this._libUrl('prguse', 1).then((url) => {
-            if (!url || !root.isConnected) return;
-            const bg = document.createElement('img');
-            bg.src = url; bg.draggable = false;
-            bg.style.cssText = `position:absolute;left:0;top:${HUD_Y}px;width:800px;height:251px;`;
-            root.insertBefore(bg, root.firstChild);
-        });
+        // 主界面（照用户样图排法，美术都是我们的 GPT 图）：左下盘龙血蓝球 hud_orb_dragon、底部居中药水格+聊天框 hud_center；
+        // 头像、右侧功能键、小地图、经验条、攻击和技能键由触屏层 MobileHud 画。JootM2 的数据、聊天、药水格逻辑照旧。
+        const EXP_H = 16;
+        const SX = (x) => Math.round(x - HUD_OX);   // 屏幕 x → root 坐标
+        const img = (name, x, y, w, h) => { const im = document.createElement('img'); im.src = 'assets/ui/' + name + '.png'; im.draggable = false;
+            im.style.cssText = 'position:absolute;left:' + SX(x) + 'px;top:' + y + 'px;width:' + w + 'px;height:' + h + 'px;pointer-events:none;'; root.appendChild(im); return im; };
+        const KO = 0.6; const OW = Math.round(300 * KO); const OH = Math.round(474 * KO); const OY = 600 - EXP_H - OH;
+        const KC = 0.62; const CW = Math.round(822 * KC); const CH = Math.round(390 * KC); const CX = Math.round((SCREEN_WIDTH - CW) / 2); const CY = 600 - EXP_H - CH;
+        this._hudLayout = { EXP_H, OW, OH, OY, CX, CY, CW, CH, KC };
 
-        // 血球/魔法球（canvas：按 HP/MP 比例纵向裁切，液面从下往上）
-        const warriorBall = this.self && this.self.job === 0 && this.self.level < 26;
+        // 血球/魔法球（液面按比例；武者 26 级前只有血，照原版）——先画液体，再盖盘龙框
         this.vitalsCanvas = document.createElement('canvas');
-        this.vitalsCanvas.width = warriorBall ? 96 : 92;
-        this.vitalsCanvas.height = warriorBall ? 92 : 90;
-        this.vitalsCanvas.style.cssText = 'position:absolute;'
-            + `left:${warriorBall ? 38 : 40}px;top:${HUD_Y + (warriorBall ? 90 : 91)}px;`;
+        const OR = 112; this.vitalsCanvas.width = 2 * OR; this.vitalsCanvas.height = 2 * OR;
+        this.vitalsCanvas.style.cssText = 'position:absolute;left:' + SX((180 - OR) * KO) + 'px;top:' + Math.round(OY + (260 - OR) * KO) + 'px;width:' + Math.round(2 * OR * KO) + 'px;height:' + Math.round(2 * OR * KO) + 'px;';
         root.appendChild(this.vitalsCanvas);
+        img('hud_orb_dragon', 0, OY, OW, OH);
+        img('hud_center', CX, CY, CW, CH);
 
-        // 等级（位图数字 Prguse[30..39]，8px/位，首位前空 8px；锚点 (660, 496)）
-        this.levelCanvas = document.createElement('canvas');
-        this.levelCanvas.width = 32;
-        this.levelCanvas.height = 14;
-        this.levelCanvas.style.cssText = `position:absolute;left:660px;top:${HUD_Y + 147}px;`;
-        root.appendChild(this.levelCanvas);
+        // 等级、经验、地图名改在头像、经验条、小地图上显示（触屏层画）；这几个原版元素保留但不显示
+        this.levelCanvas = document.createElement('canvas'); this.levelCanvas.style.display = 'none'; root.appendChild(this.levelCanvas);
+        this.expBarEl = document.createElement('div'); this.expBarEl.style.display = 'none'; root.appendChild(this.expBarEl);
+        this.loadBarEl = document.createElement('div'); this.loadBarEl.style.display = 'none'; root.appendChild(this.loadBarEl);
+        this.mapNameEl = document.createElement('div'); this.mapNameEl.style.display = 'none'; root.appendChild(this.mapNameEl);
 
-        // 经验条 / 负重条（Prguse[7] 76×13，右端裁宽度）
-        this.expBarEl = this._mkHudBar(666, HUD_Y + 178);
-        this.loadBarEl = this._mkHudBar(666, HUD_Y + 211);
-
-        // 地图名 + 坐标（屏幕底部）
-        this.mapNameEl = document.createElement('div');
-        this.mapNameEl.style.cssText = 'position:absolute;left:8px;top:576px;font-size:12px;color:#fff;'
-            + 'text-shadow:1px 1px 0 #000;';
-        root.appendChild(this.mapNameEl);
-
-        // 系统消息飘字（原版 DrawScrn.pas AddSysMsg：屏幕 (30,40) 起、行距 16、绿色、3 秒、最多 10 条）
+        // 系统消息飘字（原版左上 (30,40) 绿字）：左上让给头像，往下挪
         this.sysMsgs = [];
         this.sysMsgEl = document.createElement('div');
-        this.sysMsgEl.style.cssText = 'position:absolute;left:30px;top:40px;width:520px;pointer-events:none;'
-            + 'font-size:12px;';
+        this.sysMsgEl.style.cssText = 'position:absolute;left:' + SX(20) + 'px;top:96px;width:520px;pointer-events:none;'
+            + 'font-size:14px;text-shadow:1px 1px 0 #000,0 0 3px #000;';
         root.appendChild(this.sysMsgEl);
 
-        // 昼夜时段图标（原版 FState.pas:3236-3245 —— Prguse[15]早/[12]白/[13]傍/[14]晚 @ (748, Top+79)）
-        // 注意：本服不需要蜡烛照明，因此只画图标，不做任何黑暗/视野渲染
         this.dayIconEl = document.createElement('img');
         this.dayIconEl.draggable = false;
-        this.dayIconEl.style.cssText = `position:absolute;left:748px;top:${HUD_Y + 79}px;display:none;`
-            + 'image-rendering:pixelated;';
+        this.dayIconEl.style.cssText = 'position:absolute;left:0;top:0;display:none;';
         root.appendChild(this.dayIconEl);
         this._dayBright = -1;
 
-        // 小地图（原版 PlayScn.pas DrawMiniMap：右上 (SCREENWIDTH-120, 0)、120×120、1 格 = 1 像素）
+        // 小地图：触屏层画在右上；原版画布保留不显示
         this.miniMapCanvas = document.createElement('canvas');
         this.miniMapCanvas.width = 120;
         this.miniMapCanvas.height = 120;
-        this.miniMapCanvas.style.cssText = 'position:absolute;left:680px;top:0;width:120px;height:120px;'
-            + 'display:none;pointer-events:none;image-rendering:pixelated;';
+        this.miniMapCanvas.style.cssText = 'display:none;';
         root.appendChild(this.miniMapCanvas);
         this._miniMapTex = null;
-        this._miniMapScale = 1.5;   // mmap 底图 1.5 像素/格；兜底自生成图 1 像素/格
-        this._miniMapStyle = 0;     // 0=关、1=半透明、2=不透明（原版 ViewMiniMapStyle）
+        this._miniMapScale = 1.5;
+        this._miniMapStyle = 0;
 
-        // 聊天记录区（208,470，374×108 = 9 行 × 12px）
-        // 原版没有滚动条：固定 9 行窗口 + ChatBoardTop 偏移，↑↓/PgUp/PgDn 滚动（ClMain.pas:1902-1925）
+        // 聊天记录：放进 hud_center 的深色聊天框（原版固定行数窗口 + 滚动偏移）
         this.chatLog = document.createElement('div');
-        // 背景留空：露出底板 Prguse[1] 自带的白色聊天区（原版就是在白色区域上逐行刷背景色/文字色）
-        this.chatLog.style.cssText = 'position:absolute;left:208px;top:470px;width:374px;height:108px;'
-            + 'overflow:hidden;pointer-events:auto;font-size:12px;line-height:12px;color:#008000;';
+        this.chatLog.style.cssText = 'position:absolute;left:' + SX(CX + 34 * KC) + 'px;top:' + Math.round(CY + 152 * KC) + 'px;width:' + Math.round(760 * KC) + 'px;height:' + Math.round(200 * KC) + 'px;'
+            + 'overflow:hidden;pointer-events:auto;font-size:12px;line-height:13px;color:#9be29b;text-shadow:1px 1px 0 #000;';
         this.chatLog.addEventListener('wheel', (e) => {
             e.preventDefault();
             e.stopPropagation();
             this._scrollChat(e.deltaY > 0 ? 3 : -3);
         }, { passive: false });
         root.appendChild(this.chatLog);
-        this.chatLines = [];      // {text, color}
-        this.chatBoardTop = 0;    // 原版 DScreen.ChatBoardTop
-        this._renderChat();       // 先渲染 9 个空行，保证固定行高窗口
+        this.chatLines = [];
+        this.chatBoardTop = 0;
+        this._renderChat();
 
-        // 聊天输入框（208,581，387×12；原版 clSilver 底、默认隐藏，回车/斜杠唤出）
+        // 聊天输入框（回车/斜杠或聊天键唤出），盖在聊天框底部
         this.chatInput = document.createElement('input');
         this.chatInput.type = 'text';
         this.chatInput.maxLength = 70;
-        this.chatInput.style.cssText = 'position:absolute;left:208px;top:580px;width:387px;height:14px;'
-            + 'box-sizing:border-box;background:#c0c0c0;color:#000;border:none;outline:none;'
-            + 'font-family:SimSun,serif;font-size:12px;padding:0 2px;pointer-events:auto;display:none;';
+        this.chatInput.style.cssText = 'position:absolute;left:' + SX(CX + 30 * KC) + 'px;top:' + Math.round(CY + 330 * KC) + 'px;width:' + Math.round(765 * KC) + 'px;height:22px;'
+            + 'box-sizing:border-box;background:rgba(20,14,8,.95);color:#ffe9a8;border:1px solid #b08a3a;border-radius:3px;outline:none;'
+            + 'font-family:"DDSerif","Microsoft YaHei",serif;font-size:13px;padding:0 4px;pointer-events:auto;display:none;';
         this.chatInput.addEventListener('keydown', (e) => {
             e.stopPropagation();
             if (e.key === 'Enter') {
@@ -360,35 +345,7 @@ export class PlayScene extends Scene {
             }
         });
         root.appendChild(this.chatInput);
-
-        // 右上 4 个功能按钮（按下态 Prguse[8..11]，抬起态烘焙在底板上；坐标相对 DBottom）
-        const topBtns = [
-            { x: 643, y: 61, icon: 8, tip: '装备', action: () => { this.statePage = 0; this._toggleStateWin(); } },
-            { x: 682, y: 41, icon: 9, tip: '背包', action: () => this._toggleBag() },
-            { x: 722, y: 21, icon: 10, tip: '技能', action: () => this._openSkillSetup() },
-            { x: 764, y: 11, icon: 11, tip: '声音', action: () => this._toggleSound() },
-        ];
-        for (const b of topBtns) {
-            this._addHudButton(root, b.x, HUD_Y + b.y, 24, 24, b.icon, b.tip, b.action);
-        }
-
-        // 底板中部/右下按钮（Prguse 128..142，28×13）
-        const botBtns = [
-            { x: 219, icon: 130, tip: '小地图(V)', action: () => this._toggleMiniMap() },
-            { x: 249, icon: 132, tip: '交易', action: () => this._log('交易功能未开放。') },
-            { x: 279, icon: 134, tip: '行会', action: () => this._log('行会功能未开放。') },
-            { x: 309, icon: 128, tip: '编组', action: () => this._log('编组功能未开放。') },
-            // 属性加点：原版只有「有可分配点数」时才显示（且会闪烁），当前没有属性点系统 → 默认隐藏
-            { x: 339, icon: 140, tip: '属性加点', hidden: true, action: () => this._log('暂无可分配点数。') },
-            { x: 530, icon: 136, tip: '退出角色', action: () => this._logout() },
-            { x: 560, icon: 138, tip: '退出游戏', action: () => this._logout() },
-        ];
-        for (const b of botBtns) {
-            const btn = this._addHudButton(root, b.x, HUD_Y + 104, 28, 13, b.icon, b.tip, b.action, true);
-            if (b.hidden) {
-                btn.style.display = 'none';
-            }
-        }
+        this._openChatInput = () => { this.chatInput.style.display = 'block'; this.chatInput.focus(); };
 
         // 药水快捷栏 6 格（原版 DBelt1..6：Left 285/328/371/415/459/503，Top 59，32×29；
         // 图标 WBagItem[Looks] 居中、右下角位图数字 1..6）
@@ -396,7 +353,9 @@ export class PlayScene extends Scene {
         const quickXs = [285, 328, 371, 415, 459, 503];
         for (let i = 0; i < 6; i++) {
             const cell = document.createElement('div');
-            cell.style.cssText = `position:absolute;left:${quickXs[i]}px;top:${HUD_Y + 59}px;width:32px;height:29px;`
+            void quickXs; const { CX: qcx, CY: qcy, KC: qk } = this._hudLayout; const QX = [199, 293, 385, 479, 572, 663]; const qs = Math.round(70 * qk);
+            const qx = Math.round(qcx + QX[i] * qk - qs / 2 - HUD_OX); const qy = Math.round(qcy + 87 * qk - qs / 2);
+            cell.style.cssText = 'position:absolute;left:' + qx + 'px;top:' + qy + 'px;width:' + qs + 'px;height:' + qs + 'px;display:grid;place-items:center;'
                 + 'cursor:pointer;pointer-events:auto;overflow:hidden;';
             cell.dataset.quick = String(i);
             cell.title = `快捷栏 ${i + 1}`;
@@ -406,7 +365,7 @@ export class PlayScene extends Scene {
             root.appendChild(cell);
             const icon = document.createElement('img');
             icon.draggable = false;
-            icon.style.cssText = 'position:absolute;left:0;top:0;display:none;';
+            icon.style.cssText = 'max-width:90%;max-height:90%;display:none;';
             cell.appendChild(icon);
             // 格号（原版 PomiTextOut(Left+13, Top+19)，位图数字 Prguse[31..36]）
             const num = document.createElement('canvas');
@@ -481,12 +440,13 @@ export class PlayScene extends Scene {
 
     /** 经验/负重条：Prguse[7]（76×13），靠裁宽度表现比例。 */
     _mkHudBar(x, y) {
+        const frame = document.createElement('img');
+        frame.src = 'assets/ui/hud_bar_frame.png'; frame.draggable = false;
+        frame.style.cssText = 'position:absolute;left:' + (x - 8) + 'px;top:' + (y - 3) + 'px;width:118px;height:19px;pointer-events:none;';
+        this.hudEl.appendChild(frame);
         const el = document.createElement('div');
-        el.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:0;height:13px;`
-            + 'background-repeat:no-repeat;background-position:left center;background-size:76px 13px;';
-        this._libUrl('prguse', 7).then((url) => {
-            if (url && el.isConnected) el.style.backgroundImage = `url(${url})`;
-        });
+        el.style.cssText = `position:absolute;left:${x}px;top:${y + 3}px;width:0;height:7px;border-radius:4px;`
+            + 'background:linear-gradient(#ffe9a0,#d9a636 55%,#9a6a18);box-shadow:0 0 4px rgba(255,210,110,.6);';
         this.hudEl.appendChild(el);
         return el;
     }
@@ -2166,6 +2126,11 @@ export class PlayScene extends Scene {
     }
 
     // —— 打到天亮窗口美术：底图铺满窗口
+    _uiImg(name) {
+        this._uiImgs = this._uiImgs || {};
+        if (!this._uiImgs[name]) this._uiImgs[name] = new Promise((ok) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => ok(null); im.src = 'assets/ui/' + name + '.png'; });
+        return this._uiImgs[name];
+    }
     _ddFrame(name) {
         const bg = document.createElement('img');
         bg.src = 'assets/ui/' + name + '.png'; bg.draggable = false;
@@ -2899,13 +2864,14 @@ export class PlayScene extends Scene {
         if (this._hudKey === key) return;
         this._hudKey = key;
         this._renderVitals();
-        this._renderLevelNumber();
+        if (this.levelTextEl) this.levelTextEl.innerHTML = '<div style="font-size:.38em;color:#efe3c4">等级</div>' + (p.level || 1);
         // 经验条 / 负重条（Prguse[7]，76px 满宽）
         if (this.expBarEl && p.maxExp > 0) {
-            this.expBarEl.style.width = Math.max(0, Math.min(76, Math.round(76 * (p.exp || 0) / p.maxExp))) + 'px';
+            const em = this._expBarMax || 102; this.expBarEl.style.width = Math.max(0, Math.min(em, Math.round(em * (p.exp || 0) / p.maxExp))) + 'px';
+            if (this.expTextEl) this.expTextEl.textContent = '经验 ' + (100 * (p.exp || 0) / p.maxExp).toFixed(1) + '%  负重 ' + (p.weight || 0) + '/' + (p.maxWeight || 0);
         }
         if (this.loadBarEl && p.maxWeight > 0) {
-            this.loadBarEl.style.width = Math.max(0, Math.min(76, Math.round(76 * (p.weight || 0) / p.maxWeight))) + 'px';
+            this.loadBarEl.style.width = Math.max(0, Math.min(102, Math.round(102 * (p.weight || 0) / p.maxWeight))) + 'px';
         }
         // 地图名 + 坐标（原版 DrawScrn.pas:462，屏幕底部）
         if (this.mapNameEl) {
@@ -2920,9 +2886,21 @@ export class PlayScene extends Scene {
     async _renderVitals() {
         const p = this.self;
         if (!p || !this.vitalsCanvas) return;
+        const ctx = this.vitalsCanvas.getContext('2d');
+        const red = await this._uiImg('hud_orb_red'); const blue = await this._uiImg('hud_orb_blue');
+        if (red) {
+            const S = this.vitalsCanvas.width; ctx.clearRect(0, 0, S, S);
+            ctx.save(); ctx.beginPath(); ctx.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2); ctx.clip();
+            ctx.fillStyle = 'rgba(10,6,4,.85)'; ctx.fillRect(0, 0, S, S);
+            const fill = (img, x0, w, ratio) => { const top = Math.round(S * (1 - Math.max(0, Math.min(1, ratio)))); if (top < S) ctx.drawImage(img, x0 * img.width / S, top * img.height / S, w * img.width / S, (S - top) * img.height / S, x0, top, w, S - top); };
+            const hp = (p.hp || 0) / Math.max(1, p.maxHp); const mp = (p.mp || 0) / Math.max(1, p.maxMp);
+            if (p.job === 0 && p.level < 26) fill(red, 0, S, hp);
+            else { fill(red, 0, S / 2 - 1, hp); if (blue) fill(blue, S / 2 + 1, S / 2 - 1, mp); ctx.fillStyle = 'rgba(20,12,6,.9)'; ctx.fillRect(S / 2 - 1, 0, 2, S); }
+            ctx.restore();
+            return;
+        }
         const lib = getLib('prguse');
         if (!lib) return;
-        const ctx = this.vitalsCanvas.getContext('2d');
         ctx.clearRect(0, 0, this.vitalsCanvas.width, this.vitalsCanvas.height);
         try {
             if (p.job === 0 && p.level < 26) {

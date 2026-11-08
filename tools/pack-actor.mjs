@@ -26,7 +26,25 @@ async function loadStrip(file) {
   const img = sharp(file); const { width, height } = await img.metadata();
   const n = Math.max(1, Math.round(width / height));
   const raw = await img.ensureAlpha().raw().toBuffer();
+  keyEdgeBg(raw, width, height);
   return { raw, width, height, n };
+}
+// GPT 偶尔给不透明的纯色底（常见黑底）：四角都不透明且颜色相近时，从边缘把这种底色泛洪抠掉
+function keyEdgeBg(d, W, H) {
+  const at = (i) => [d[i * 4], d[i * 4 + 1], d[i * 4 + 2], d[i * 4 + 3]];
+  const corners = [0, W - 1, (H - 1) * W, H * W - 1].map(at);
+  if (corners.some((c) => c[3] < 200)) return;
+  const [r0, g0, b0] = corners[0];
+  if (corners.some((c) => Math.abs(c[0] - r0) + Math.abs(c[1] - g0) + Math.abs(c[2] - b0) > 40)) return;
+  const near = (i) => Math.abs(d[i * 4] - r0) + Math.abs(d[i * 4 + 1] - g0) + Math.abs(d[i * 4 + 2] - b0) < 48;
+  const seen = new Uint8Array(W * H); const st = [];
+  for (let x = 0; x < W; x++) st.push(x, (H - 1) * W + x);
+  for (let y = 0; y < H; y++) st.push(y * W, y * W + W - 1);
+  while (st.length) {
+    const i = st.pop(); if (seen[i]) continue; seen[i] = 1; if (!near(i)) continue;
+    d[i * 4 + 3] = 0; const x = i % W; const y = (i / W) | 0;
+    if (x > 0) st.push(i - 1); if (x < W - 1) st.push(i + 1); if (y > 0) st.push(i - W); if (y < H - 1) st.push(i + W);
+  }
 }
 // 一条动图：每帧的不透明区域
 function bboxOf(raw, W, x0, w, h) {

@@ -36,7 +36,7 @@ function roundBtn(ctx, x, y, r, label, opt = {}) {
 const LAZY = {};
 function ui(k) { if (!(k in LAZY)) { LAZY[k] = null; const im = new Image(); im.onload = () => { LAZY[k] = im; }; im.src = 'assets/ui/' + k + '.png'; } return LAZY[k]; }
 function pic(ctx, k, x, y, w, h) { const im = ui(k); if (!im) return false; ctx.drawImage(im, x, y, w, h); return true; }
-const BTN_ART = { attack: 'hud_btn_attack', bag: 'hud_btn_bag', role: 'hud_btn_role', lock: 'hud_btn_lock', pickup: 'hud_btn_pick' };
+const BTN_ART = { attack: 'hb_attack', lock: 'hud_btn_lock', pickup: 'hud_btn_pick' };
 const UI = {};
 for (const k of ['hud_orb_frame', 'hud_orb_red', 'hud_orb_blue', 'hud_panel', 'hud_btn']) {
     const im = new Image(); im.onload = () => { UI[k] = im; }; im.src = 'assets/ui/' + k + '.png';
@@ -112,10 +112,11 @@ export class MobileHud {
         window.addEventListener('pointermove', this._move, true);
         window.addEventListener('pointerup', this._up, true);
         window.addEventListener('pointercancel', this._up, true);
-        if (scene.hudEl) scene.hudEl.style.display = 'none';   // 原版 DOM HUD 不用
+        // JootM2 原版底板（血蓝球、聊天、药水格、功能按钮）照常显示；这里只加触屏操作
     }
 
     destroy() {
+        if (this.overlay) this.overlay.remove();
         window.removeEventListener('pointerdown', this._down, true);
         window.removeEventListener('pointermove', this._move, true);
         window.removeEventListener('pointerup', this._up, true);
@@ -124,20 +125,28 @@ export class MobileHud {
 
     // 布局参照手机传奇类常见排法：右下大攻击键 + 一圈技能，旁边锁定目标；右侧中部背包、角色
     _layout() {
-        const ax = W - 92; const ay = H - 130;
+        // 排法照用户样图：右下大攻击键 + 技能弧；右侧一列功能键（背包/角色/技能/组队/行会）；右上小地图下面设置键；
+        // 底部聊天框左边两个小键（往上翻、聊天）。摇杆不固定：在左半屏按下就在按下的地方出现
+        const ax = W - 92; const ay = H - 112;
+        const arc = (deg, r = 122) => [ax + Math.cos(deg * Math.PI / 180) * r, ay + Math.sin(deg * Math.PI / 180) * r];
+        const L = this.scene._hudLayout || { CX: W / 2 - 255, CY: H - 258, KC: 0.62 };
         this.buttons = [
-            { id: 'attack', x: ax, y: ay, r: 50, label: '攻击', size: 18 },
-            { id: 'sk1', x: ax - 112, y: ay + 72, r: 30, label: '1' },
-            { id: 'sk2', x: ax - 204, y: ay + 72, r: 30, label: '2' },
-            { id: 'sk3', x: ax - 120, y: ay - 6, r: 30, label: '3' },
-            { id: 'sk4', x: ax - 74, y: ay - 92, r: 30, label: '4' },
-            { id: 'sk5', x: ax + 4, y: ay - 120, r: 30, label: '5' },
-            { id: 'lock', x: ax - 222, y: ay - 2, r: 26, label: '锁', color: '#ffe27a' },
-            { id: 'pickup', x: ax - 196, y: ay - 78, r: 24, label: '拾', color: '#ffe27a' },
-            { id: 'bag', x: W - 130, y: 232, r: 28, label: '背包', size: 12 },
-            { id: 'role', x: W - 56, y: 232, r: 28, label: '角色', size: 12 },
-            { id: 'mode', x: 238, y: H - 44, r: 20, label: '和平', size: 11 },
-            { id: 'rank', x: 420, y: H - 44, r: 20, label: '榜', size: 13 },
+            { id: 'attack', x: ax, y: ay, r: 52, label: '攻击', size: 18 },
+            { id: 'sk1', x: arc(180)[0], y: arc(180)[1], r: 30, label: '1' },
+            { id: 'sk2', x: arc(220)[0], y: arc(220)[1], r: 30, label: '2' },
+            { id: 'sk3', x: arc(258)[0], y: arc(258)[1], r: 30, label: '3' },
+            { id: 'sk4', x: arc(146, 118)[0], y: arc(146, 118)[1], r: 26, label: '4' },
+            { id: 'sk5', x: arc(292, 118)[0], y: arc(292, 118)[1], r: 26, label: '5' },
+            { id: 'lock', x: ax - 196, y: ay - 150, r: 22, label: '锁', color: '#ffe27a' },
+            { id: 'pickup', x: ax - 196, y: ay - 92, r: 22, label: '拾', color: '#ffe27a' },
+            { id: 'bag', x: W - 40, y: 196, r: 26, label: '背包', art: 'hb_bag', tag: true },
+            { id: 'role', x: W - 40, y: 256, r: 26, label: '角色', art: 'hb_role', tag: true },
+            { id: 'magwin', x: W - 40, y: 316, r: 26, label: '技能', art: 'hb_skill', tag: true },
+            { id: 'team', x: W - 108, y: 196, r: 24, label: '组队', art: 'hb_team', tag: true },
+            { id: 'guild', x: W - 108, y: 256, r: 24, label: '行会', art: 'hb_guild', tag: true },
+            { id: 'set', x: W - 20, y: 150, r: 16, label: '', art: 'hb_set' },
+            { id: 'chatup', x: L.CX - 20, y: L.CY + 120 * L.KC, r: 17, label: '', art: 'hb_up' },
+            { id: 'chat', x: L.CX - 20, y: L.CY + 200 * L.KC, r: 17, label: '', art: 'hb_chat' },
         ];
     }
 
@@ -152,6 +161,8 @@ export class MobileHud {
         const s = this.scene; if (!s.self) return;
         // 原版窗口（背包、NPC 对话等 DOM 窗）上的点击交给它们自己处理
         if (e.target && e.target.closest && e.target.closest('input,textarea,button,.dwin')) return;
+        // 底栏网页层里能点的东西（药水格、聊天记录等）自己处理，不当成点地图
+        if (e.target && e.target.id !== 'screen' && e.target.closest && e.target.closest('#gui')) return;
         const { x, y } = this._xy(e);
         if (x < 0 || y < 0 || x > W || y > H) return;
         e.preventDefault(); e.stopPropagation();
@@ -164,17 +175,21 @@ export class MobileHud {
         if (b) { this.pressed.set(e.pointerId, b.id); this._press(b.id); return; }
         const sl = (this.slots || []).find((q) => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h);
         if (sl) { this.scene._useQuickSlot(sl.i); return; }
-        if (x < 300 && y > H * 0.4 && !this.stick) { this.stick = { id: e.pointerId, ox: x, oy: y, x, y }; s.chaseTargetId = null; return; }
+        const L = this.scene._hudLayout; const inUi = L && ((x < L.OW && y > L.OY + 40) || (x > L.CX && x < L.CX + L.CW && y > L.CY));
+        if (inUi) return;   // 血球、药水格、聊天框归底栏自己处理
+        // 左半屏：先记下按下点，拖动超过 12 像素才变成摇杆；没拖就当点地图（选怪、和 NPC 说话）
+        if (x < W * 0.45 && y > 110 && !this.stick) { this.stick = { id: e.pointerId, ox: x, oy: y, x, y, pending: true }; return; }
         this._tapWorld(x, y);
     }
     _onMove(e) {
         if (!this.stick || e.pointerId !== this.stick.id) return;
         e.preventDefault();
         const { x, y } = this._xy(e); this.stick.x = x; this.stick.y = y;
+        if (this.stick.pending) { if (Math.hypot(x - this.stick.ox, y - this.stick.oy) < 12) return; this.stick.pending = false; this.scene.chaseTargetId = null; }
         this._applyStick();
     }
     _onUp(e) {
-        if (this.stick && e.pointerId === this.stick.id) { this.stick = null; this.scene._holding = false; }
+        if (this.stick && e.pointerId === this.stick.id) { const st = this.stick; this.stick = null; this.scene._holding = false; if (st.pending) this._tapWorld(st.ox, st.oy); }
         this.pressed.delete(e.pointerId);
         if (this.skDown && this.skDown.pid === e.pointerId) {
             const sd = this.skDown; this.skDown = null;
@@ -199,6 +214,33 @@ export class MobileHud {
             const free = SKILL_KEYS.find((k) => !bound[k]); if (!free) return;
             this._autoTried.add(mid); this._setKey(mid, free); bound[free] = { mid, sk };
         }
+    }
+    // 左上头像：圆框里放本职业立绘的头部，右边名字、等级和职业
+    _head(ctx, p) {
+        // hud_head 是 600×199：左边圆框（圆心约 97,104，半径约 56），右边名牌
+        const fw = 330; const k = fw / 600; const fh = 199 * k; const x = 4, y = 2;
+        const cx = x + 97 * k, cy = y + 104 * k, r = 54 * k;
+        const cls = ['cls_warrior2', 'cls_mage2', 'cls_spirit2'][p.job || 0];
+        const face = ui(cls);
+        ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = '#120c08'; ctx.fill(); ctx.clip();
+        if (face) { const sw = face.width * 0.46; ctx.drawImage(face, face.width * 0.27, face.height * 0.03, sw, sw, cx - r, cy - r, r * 2, r * 2); }
+        ctx.restore();
+        if (!pic(ctx, 'hud_head', x, y, fw, fh)) { frame(ctx, x + 70, y + 14, 210, 52, 8); }
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; const tx = x + 182 * k;
+        ctx.font = 'bold 16px "DDSerif","Microsoft YaHei",serif'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(p.name || '', tx, y + 96 * k); ctx.fillStyle = '#f6e7c0'; ctx.fillText(p.name || '', tx, y + 96 * k);
+        const t = 'Lv.' + (p.level || 1) + ' ' + (['武者', '术士', '灵师'][p.job || 0] || '');
+        ctx.font = '14px "DDSerif","Microsoft YaHei",serif'; ctx.strokeText(t, tx, y + 128 * k); ctx.fillStyle = GOLD_HI; ctx.fillText(t, tx, y + 128 * k);
+    }
+    // 最底一条经验条：Exp 百分比（当前/升级所需）
+    _expBar(ctx, p) {
+        const L = this.scene._hudLayout || { EXP_H: 16 }; const h = L.EXP_H; const y = H - h;
+        const k = Math.max(0, Math.min(1, (p.exp || 0) / (p.maxExp || 1e9)));
+        ctx.fillStyle = '#0b0805'; ctx.fillRect(0, y, W, h);
+        const g = ctx.createLinearGradient(0, y, 0, H); g.addColorStop(0, '#9ff07a'); g.addColorStop(0.5, '#3fae2c'); g.addColorStop(1, '#1d6a14');
+        ctx.fillStyle = g; ctx.fillRect(4, y + 3, (W - 8) * k, h - 6);
+        if (!pic(ctx, 'hud_expbar', -6, y - 3, W + 12, h + 6)) { ctx.strokeStyle = GOLD; ctx.lineWidth = 1; ctx.strokeRect(1.5, y + 1.5, W - 3, h - 3); }
+        const txt = 'Exp ' + (k * 100).toFixed(2) + '% (' + (p.exp || 0) + ' / ' + (p.maxExp || 0) + ')';
+        ctx.font = 'bold 11px "DDSerif","Microsoft YaHei",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(txt, W / 2, y + h / 2 + 0.5); ctx.fillStyle = '#fff'; ctx.fillText(txt, W / 2, y + h / 2 + 0.5);
     }
     // —— 仓库：左边仓库、右边背包，点一件就存进去 / 取出来
     openStorage(items) { this.storage = { items }; }
@@ -292,7 +334,13 @@ export class MobileHud {
         else if (id === 'pickup') this._pickup();
         else if (id === 'lock') { const t = this._nearest('monster'); if (t) { s.castTarget = t.id; s.chaseTargetId = t.id; s.magicTarget = t; } }
         else if (id === 'bag') { if (s._toggleBag) s._toggleBag(); }
-        else if (id === 'role') { if (s._toggleStateWin) s._toggleStateWin(); }
+        else if (id === 'role') { s.statePage = 0; if (s._toggleStateWin) s._toggleStateWin(); }
+        else if (id === 'magwin') { if (s._openSkillSetup) s._openSkillSetup(); }
+        else if (id === 'team') s._log('编组功能未开放。');
+        else if (id === 'guild') s._log('行会功能未开放。');
+        else if (id === 'set') { if (s._toggleSound) s._toggleSound(); }
+        else if (id === 'chat') { if (s._openChatInput) s._openChatInput(); }
+        else if (id === 'chatup') { if (s._scrollChat) s._scrollChat(-3); }
     }
 
     _pickup() {
@@ -321,33 +369,26 @@ export class MobileHud {
         const dir = s._dirTo(g.x, g.y); if (dir >= 0) { s.conn.send('move', { dir, run: false }); s._lastMoveAt = now; }
     }
 
-    render(ctx) {
+    render(ctx0) {
+        // 触屏按钮画在自己的一层画布上，叠在 JootM2 底板（网页层）上面，不然会被底板挡住
+        if (!this.overlay || !this.overlay.isConnected) { const gui = document.getElementById('gui'); this.overlay = document.createElement('canvas'); this.overlay.width = W; this.overlay.height = H; this.overlay.style.cssText = 'position:absolute;left:0;top:0;width:' + W + 'px;height:' + H + 'px;pointer-events:none;z-index:50;'; gui.appendChild(this.overlay); }
+        const ctx = this.overlay.getContext('2d'); ctx.clearRect(0, 0, W, H); void ctx0;
         const s = this.scene; const p = s.self; if (!p) return;
+        if (s._hudLayout && this._laidFor !== s._hudLayout) { this._laidFor = s._hudLayout; this._layout(); }
         const now = Date.now();
         this.tick(now);
         ctx.save();
-        // —— 左上：角色名 + 任务追踪
-        if (!pic(ctx, 'hud_frame_panel', 4, 4, 240, 104)) frame(ctx, 8, 8, 232, 96, 6);
-        ctx.font = 'bold 13px "DDSerif","Microsoft YaHei",serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillStyle = '#f0e2c0'; ctx.fillText(p.name || '', 18, 24);
-        ctx.fillStyle = GOLD_HI; ctx.textAlign = 'right'; ctx.fillText((['武者', '术士', '灵师'][p.job || 0] || '') + ' ' + (p.level || 1) + '级', 230, 24);
-        ctx.fillStyle = 'rgba(200,162,74,.5)'; ctx.fillRect(16, 36, 216, 1);
-        ctx.textAlign = 'left'; ctx.font = '12px "DDSerif","Microsoft YaHei",serif';
-        const tips = this._questLines(p);
-        tips.forEach((t, i) => { ctx.fillStyle = t[1]; ctx.fillText(t[0], 18, 52 + i * 17); });
+        // —— 左上：头像框 + 名字、等级职业（样图里的战力、VIP 不做）
+        this._head(ctx, p);
         // —— 右上：小地图（地图名在上，坐标在下）
         this._miniMap(ctx, W - 168, 8, 160, 120);
-        // —— 底部：状态栏（时间、等级、经验）
-        this._statusBar(ctx, p, now);
-        // —— 血蓝合一的球 + 两侧小按钮
-        const r = 54; const ocx = 330; const ocy = H - 26 - r;
-        splitOrb(ctx, ocx, ocy, r, (p.hp || 0) / (p.maxHp || 1), (p.mp || 0) / (p.maxMp || 1), now);
-        // 球里不写数字，只看液面；具体数值在底部状态栏
-        // —— 快捷格（药水等，点了就用）+ 下面聊天框
-        this._quickSlots(ctx, p);
-        this._chat(ctx);
-        // —— 摇杆
-        const st = this.stick; const bx = st ? st.ox : 150; const by = st ? st.oy : H - 175;
-        ctx.globalAlpha = st ? 0.95 : 0.7;
+        // —— 最底：经验条
+        this._expBar(ctx, p);
+        // —— 摇杆：只在按住时出现在按下的位置
+        const st = this.stick;
+        if (st && !st.pending) {
+        const bx = st.ox; const by = st.oy;
+        ctx.globalAlpha = 0.95;
         if (!pic(ctx, 'hud_joy_base', bx - STICK_R - 8, by - STICK_R - 8, (STICK_R + 8) * 2, (STICK_R + 8) * 2)) {
             ctx.beginPath(); ctx.arc(bx, by, STICK_R, 0, Math.PI * 2); ctx.fillStyle = 'rgba(20,16,12,.5)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = IRON; ctx.stroke();
             ctx.beginPath(); ctx.arc(bx, by, STICK_R - 4, 0, Math.PI * 2); ctx.lineWidth = 1.5; ctx.strokeStyle = GOLD; ctx.stroke();
@@ -355,15 +396,16 @@ export class MobileHud {
         let kx = bx, ky = by; if (st) { const dx = st.x - st.ox; const dy = st.y - st.oy; const d = Math.hypot(dx, dy) || 1; const m = Math.min(d, STICK_R); kx = bx + dx / d * m; ky = by + dy / d * m; }
         if (!pic(ctx, 'hud_joy_knob', kx - 32, ky - 32, 64, 64)) roundBtn(ctx, kx, ky, 28, '', { hi: '#7a6450', lo: '#2a2018' });
         ctx.globalAlpha = 1;
+        }
         // —— 按钮（技能键显示所放技能的名字，没放的显示编号，长按可设置）
         this._autoBind();
         const bound = this._boundMap();
         for (const b of this.buttons) {
             const pressed = [...this.pressed.values()].includes(b.id);
             let alpha = 0.92;
-            let art = BTN_ART[b.id]; let icon = null;
+            let art = b.art || BTN_ART[b.id]; let icon = null;
             if (b.id.startsWith('sk')) { const bd = bound[Number(b.id.slice(2))]; b.label = bd ? (bd.sk.name || '技能').slice(0, 4) : String(b.id.slice(2)); b.size = bd ? 11 : 14; if (!bd) alpha = 0.45; icon = bd ? 'sk_' + bd.mid : null; art = 'hud_btn_round'; }
-            if (b.id === 'mode' || b.id === 'rank') art = 'hud_btn_round';
+
             if (b.id === 'pickup' && !s.groundItems.size) alpha = 0.5;
             if (b.id === 'lock' && s.chaseTargetId != null) alpha = 1;
             const rr2 = b.r * (pressed ? 0.94 : 1);
@@ -374,7 +416,8 @@ export class MobileHud {
             } else if (art && ui(art)) {
                 ctx.globalAlpha = alpha; pic(ctx, art, b.x - rr2 * 1.12, b.y - rr2 * 1.12, rr2 * 2.24, rr2 * 2.24); ctx.globalAlpha = 1;
                 if (art === 'hud_btn_round') { ctx.font = `bold ${b.size || 13}px "DDSerif","Microsoft YaHei",serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(b.label, b.x, b.y + 1); ctx.fillStyle = b.color || GOLD_HI; ctx.fillText(b.label, b.x, b.y + 1); }
-            } else roundBtn(ctx, b.x, b.y, rr2, b.label, { size: b.size, color: b.color, alpha, pressed });
+            } else roundBtn(ctx, b.x, b.y, rr2, b.tag ? '' : b.label, { size: b.size, color: b.color, alpha, pressed });
+            if (b.tag) { ctx.font = 'bold 12px "DDSerif","Microsoft YaHei",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(b.label, b.x, b.y + rr2 + 7); ctx.fillStyle = '#ffe6a6'; ctx.fillText(b.label, b.x, b.y + rr2 + 7); }
             if (pressed) { ctx.beginPath(); ctx.arc(b.x, b.y, rr2 + 2, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,230,160,.8)'; ctx.stroke(); }
         }
         if (this.skDown && Date.now() - this.skDown.at > 250) { const b = this.buttons.find((q) => q.id === this.skDown.id); const k = Math.min(1, (Date.now() - this.skDown.at) / 450); ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.lineWidth = 3; ctx.strokeStyle = GOLD_HI; ctx.stroke(); }
@@ -483,7 +526,7 @@ export class MobileHud {
         ctx.fillStyle = '#ffd84a'; ctx.fill(); ctx.lineWidth = 1.2; ctx.strokeStyle = '#3a2000'; ctx.stroke(); ctx.restore();
         ctx.restore();
         // GPT 小地图框盖在最上面，再写地图名（框顶部有名牌）
-        if (mmArt) { pic(ctx, 'hud_frame_minimap', x - 10, y - 8, w + 20, h + hh * 2 + 16); ctx.font = 'bold 13px "DDSerif","Microsoft YaHei",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(name, x + w / 2, y + hh / 2 + 1); ctx.fillStyle = GOLD_HI; ctx.fillText(name, x + w / 2, y + hh / 2 + 1); }
+        if (mmArt) { pic(ctx, ui('hud_minimap2') ? 'hud_minimap2' : 'hud_frame_minimap', x - 10, y - 8, w + 20, h + hh * 2 + 16); ctx.font = 'bold 13px "DDSerif","Microsoft YaHei",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(name, x + w / 2, y + hh / 2 + 1); ctx.fillStyle = GOLD_HI; ctx.fillText(name, x + w / 2, y + hh / 2 + 1); }
         // 坐标
         ctx.font = '12px "DDSerif","Microsoft YaHei",serif'; ctx.fillStyle = '#e8dcc0'; ctx.textAlign = 'center';
         ctx.fillText(p.x + ' , ' + p.y, x + w / 2, my + h + hh / 2);
