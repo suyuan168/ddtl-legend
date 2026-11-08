@@ -2030,6 +2030,7 @@ public final class GameWorld {
         o.addProperty("maxMp", a.maxMp);
         o.addProperty("level", a.level);
         o.addProperty("exp", a.exp);
+        if (a instanceof Player) o.addProperty("maxExp", ExperienceTable.expForLevel(a.level));   // 升级后经验条分母跟着变
         long now = System.currentTimeMillis();
         if (a instanceof Player) {
             Player pl = (Player) a;

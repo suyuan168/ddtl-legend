@@ -14,6 +14,18 @@ import { getLib } from './image/Images.mjs';
 const canvas = document.getElementById('screen');
 canvas.width = SCREEN_WIDTH;
 canvas.height = SCREEN_HEIGHT;
+// 舞台按窗口等比缩放铺满（横屏手机 / 电脑窗口）
+const stage = document.getElementById('stage');
+function fitStage() {
+    const k = Math.min(window.innerWidth / SCREEN_WIDTH, window.innerHeight / SCREEN_HEIGHT);
+    stage.style.width = SCREEN_WIDTH + 'px';
+    stage.style.height = SCREEN_HEIGHT + 'px';
+    stage.style.transform = `scale(${k})`;
+    stage.style.transformOrigin = 'center center';
+    stage.style.touchAction = 'none';
+}
+fitStage();
+window.addEventListener('resize', fitStage);
 const ctx = canvas.getContext('2d');
 
 // 全局屏蔽浏览器右键菜单（右键用于游戏跑动，任何界面包括 NPC 对话框都不弹菜单）

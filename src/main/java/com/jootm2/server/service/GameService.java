@@ -364,12 +364,15 @@ public final class GameService {
         c.skills = starterSkills(job);
         c.createdAt = System.currentTimeMillis();
 
+        // 打到天亮新手礼：木剑直接拿在手上，4 瓶小血药、2 瓶小蓝药放进快捷栏
         List<ItemInstance> items = new ArrayList<>();
-        addStarter(items, 0, 1);
-        addStarter(items, 1, 1);
+        addStarter(items, 6, 1);
+        if (!items.isEmpty()) items.get(0).slot = 1;   // 1 = 武器槽
+        addStarter(items, 1, 4);
         addStarter(items, 2, 2);
-        addStarter(items, 3, 2);
         c.items = items;
+        c.quickSlots = new ArrayList<>();
+        for (ItemInstance it : items) if (it.slot < 0 && c.quickSlots.size() < 6) c.quickSlots.add(it.makeIndex);
 
         characterDao.insert(c);
         r.addProperty("ok", true);

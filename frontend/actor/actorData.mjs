@@ -295,6 +295,7 @@ export function npcAction(appr) {
 
 /** GetMonImg：appr → 图库 key（mon1~mon21 / effect）。 */
 export function getMonImgLib(appr) {
+    if (appr >= 900) return 'ddmon';   // 打到天亮原创怪物图库
     const n = Math.floor(appr / 10);
     if (n === 0) return 'mon1';
     if (n >= 1 && n <= 20) return 'mon' + (n + 1);
@@ -304,6 +305,7 @@ export function getMonImgLib(appr) {
 
 /** GetOffset：appr → 帧偏移。 */
 export function getMonOffset(appr) {
+    if (appr >= 900) return (appr - 900) * 440;   // 每只怪占 440 帧（MA14 动作表）
     const nrace = Math.floor(appr / 10);
     const npos = appr % 10;
     switch (nrace) {

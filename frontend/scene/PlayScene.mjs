@@ -2,6 +2,7 @@
 // 真实等距地图 + 实体（sprite）+ 鼠标按住移动（走/跑）+ HUD + 聊天。
 
 import { Scene } from './Scene.mjs';
+import { MobileHud } from '../mobile/MobileHud.mjs';
 import { MapActor } from '../map/MapActor.mjs';
 import { ActorSprite } from '../actor/ActorSprite.mjs';
 import { getLib } from '../image/Images.mjs';
@@ -218,6 +219,7 @@ export class PlayScene extends Scene {
         }
 
         this._buildHud();
+        this.mobile = new MobileHud(this);   // 触屏摇杆 + 画布界面（替代原版 DOM HUD）
         this._miniMapIndex = this.snapshot.miniMapIndex;
         this._loadMiniMapTexture(this._miniMapIndex);   // 小地图底图（mmap.wil）
         this._setDayBright(this.snapshot.dayBright);   // 昼夜时段图标
@@ -962,6 +964,7 @@ export class PlayScene extends Scene {
                     if (msg.maxMp !== undefined) e.maxMp = msg.maxMp;
                     if (msg.level !== undefined) e.level = msg.level;
                     if (msg.exp !== undefined) e.exp = msg.exp;
+                    if (msg.maxExp !== undefined) e.maxExp = msg.maxExp;
                     if (msg.gold !== undefined) e.gold = msg.gold;
                     if (msg.skills !== undefined) e.skills = msg.skills;   // 技能快捷键更新
                     // 战斗属性（幽灵盾/神圣战甲等 buff 改变 AC/MAC，F10 状态页实时刷新）
@@ -2634,8 +2637,8 @@ export class PlayScene extends Scene {
         this.mapActor.render(ctx, vcx, vcy, entities, shiftX, shiftY);
         this._renderEffects(ctx, vcx, vcy, shiftX, shiftY);
         this._renderGroundItems(ctx);
-        this._renderHud();
-        this._renderMiniMap();
+        if (this.mobile) this.mobile.render(ctx);
+        else { this._renderHud(); this._renderMiniMap(); }
     }
 
     // 实体精灵缓存（entityAdd 替换对象后重建）
@@ -3064,6 +3067,7 @@ export class PlayScene extends Scene {
     }
 
     onExit() {
+        if (this.mobile) this.mobile.destroy();
         document.removeEventListener('keydown', this._keyDown);
         if (this._keyUp) document.removeEventListener('keyup', this._keyUp);
         if (this._mdHandler) this._canvas.removeEventListener('mousedown', this._mdHandler);

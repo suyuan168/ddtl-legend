@@ -2,6 +2,7 @@
 // 按 key（tiles/smtiles/objects/mon1/hum/npc...）缓存 WIL 实例。
 
 import { WIL } from '../gfx/wil.mjs';
+import { AtlasLib } from '../gfx/atlas.mjs';
 import { imageUrls } from '../gfx/resource.mjs';
 
 const cache = new Map();
@@ -10,7 +11,8 @@ export function getLib(key) {
     if (cache.has(key)) return cache.get(key);
     const urls = imageUrls(key);
     if (!urls) return null;
-    const lib = new WIL(urls.wil, urls.wix);
+    // 我们自己的图集（{a: json}）优先；没有再用原版 WIL
+    const lib = urls.atlas ? new AtlasLib(urls.atlas) : new WIL(urls.wil, urls.wix);
     cache.set(key, lib);
     return lib;
 }

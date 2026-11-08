@@ -74,6 +74,13 @@ public final class ResourcesIndexGenerator {
                 }
             }
         }
+        // 我们自己的图集：Data/<key>.json（PNG 图集 + 帧表），同名时覆盖原版 WIL
+        for (String f : allFiles) {
+            if (!lower(f).endsWith(".json")) continue;
+            JsonObject lib = new JsonObject();
+            lib.addProperty("a", dirName + "/" + f);
+            images.add(lower(baseName(f)), lib);
+        }
         return images;
     }
 

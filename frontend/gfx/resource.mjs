@@ -19,6 +19,7 @@ export async function loadResources() {
 export function imageUrls(key) {
     const img = _images?.[key];
     if (!img) return null;
+    if (img.a) return { atlas: `/resources/${img.a}` };
     return { wil: `/resources/${img.l}`, wix: `/resources/${img.x}` };
 }
 
