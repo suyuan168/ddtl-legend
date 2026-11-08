@@ -1480,18 +1480,12 @@ export class PlayScene extends Scene {
         // 用 left 定位（原版右对齐 ≈ 800-232=568），便于拖动
         // 窗口背景用 Prguse3[207]（232×362）：比 Prguse[370]（232×325）高 37px，
         // 内页区域 168×234（对应 Prguse3 的 29/30/32/33），底部信息框也更完整。
-        win.style.cssText = 'position:absolute;left:568px;top:0;width:232px;height:362px;'
-            + 'pointer-events:auto;font-family:SimSun,serif;color:#e8d9b0;';
+        // 打到天亮：四页结构、坐标照原版，只换美术（GPT 外框 ui_win_tall、装备页底图 ui_state_doll、格子 hud_slot），放大 1.3 倍
+        win.className = 'dwin';
+        win.style.cssText = 'position:absolute;left:' + Math.round(SCREEN_WIDTH - 232 * 1.3 - 40) + 'px;top:18px;width:232px;height:362px;transform:scale(1.3);transform-origin:0 0;'
+            + 'pointer-events:auto;font-family:"DDSerif","Microsoft YaHei",serif;color:#efe3c4;';
         win.style.display = 'none';
-        this._libUrl('prguse3', 207).then((url) => {
-            if (url && this.stateWin === win) {
-                const bg = document.createElement('img');
-                bg.src = url; bg.draggable = false;
-                bg.className = 'win-drag';
-                bg.style.cssText = 'position:absolute;left:0;top:0;';
-                win.insertBefore(bg, win.firstChild);
-            }
-        });
+        win.appendChild(this._ddOuterFrame('ui_win_tall', 14));
         // 装备页（人物底图 + 13 装备槽）
         this.stateEquipWrap = document.createElement('div');
         this.stateEquipWrap.style.cssText = 'position:absolute;left:0;top:0;width:232px;height:362px;';
@@ -1515,18 +1509,15 @@ export class PlayScene extends Scene {
         this.stateAttrEl.style.cssText = 'position:absolute;left:112px;top:99px;width:96px;'
             + 'font-size:12px;line-height:20px;text-shadow:1px 1px 0 #000;';
         this.stateAttrWrap.appendChild(this.stateAttrEl);
+        ['防御', '魔御', '攻击', '魔法', '道术', '生命', '魔法值'].forEach((t, i) => {
+            const l = document.createElement('div'); l.textContent = t;
+            l.style.cssText = 'position:absolute;left:48px;top:' + ATTR_ROWS[i][1] + 'px;font-size:12px;color:#ffd76a;text-shadow:1px 1px 0 #000;';
+            this.stateAttrWrap.appendChild(l);
+        });
         // 属性数值页（原版 StatePage=2：经验/重量/负重/腕力/精确度/敏捷度等，背景 Prguse3[32] 空白纹理页）
         this.stateAttr2Wrap = document.createElement('div');
         this.stateAttr2Wrap.style.cssText = 'position:absolute;left:0;top:0;width:232px;height:362px;display:none;';
         win.appendChild(this.stateAttr2Wrap);
-        this._libUrl('prguse3', 32).then((url) => {
-            if (url && this.stateWin === win) {
-                const bg = document.createElement('img');
-                bg.src = url; bg.draggable = false;
-                bg.style.cssText = 'position:absolute;left:38px;top:52px;';
-                this.stateAttr2Wrap.insertBefore(bg, this.stateAttr2Wrap.firstChild);
-            }
-        });
         this.stateAttr2El = document.createElement('div');
         this.stateAttr2El.style.cssText = 'position:absolute;left:58px;top:62px;width:150px;'
             + 'font-size:12px;line-height:14px;text-shadow:1px 1px 0 #000;';
@@ -1535,15 +1526,7 @@ export class PlayScene extends Scene {
         this.stateSkillWrap = document.createElement('div');
         this.stateSkillWrap.style.cssText = 'position:absolute;left:0;top:0;width:232px;height:362px;display:none;';
         win.appendChild(this.stateSkillWrap);
-        this._libUrl('prguse3', 33).then((url) => {
-            if (url && this.stateWin === win) {
-                const bg = document.createElement('img');
-                bg.src = url; bg.draggable = false;
-                bg.style.cssText = 'position:absolute;left:38px;top:52px;';
-                // 插入到技能列表之前：背景异步加载完时列表已存在，保证列表文字不被背景遮挡
-                this.stateSkillWrap.insertBefore(bg, this.stateSkillListEl);
-            }
-        });
+        for (let i = 0; i < 5; i++) this.stateSkillWrap.appendChild(this._ddSlotBg(43, 56 + i * 37, 37, 37));
         // 技能列表：5 行（图标 31x33 @原版 DStMag1-5 位置 46,59/96/134/171/208 + 名字/等级/快捷键）
         this.stateSkillListEl = document.createElement('div');
         this.stateSkillListEl.style.cssText = 'position:absolute;left:46px;top:59px;width:170px;height:185px;'
@@ -1551,54 +1534,27 @@ export class PlayScene extends Scene {
         this.stateSkillWrap.appendChild(this.stateSkillListEl);
         // 内部分页按钮（原版 DStPageUp=398 上 213,113 / DStPageDown=396 下 213,143），仅技能页显示
         const mkMagPage = (idx, top, delta) => {
-            const b = document.createElement('div');
-            b.style.cssText = `position:absolute;left:213px;top:${top}px;width:12px;height:21px;cursor:pointer;`;
-            b.addEventListener('click', () => {
+            this.stateSkillWrap.appendChild(this._ddButton(delta < 0 ? '▲' : '▼', 200, top - 4, 30, 28, () => {
                 this.magicPage += delta;
                 this._refreshSkillPage();
-            });
-            this._libUrl('prguse', idx).then((url) => {
-                if (url) { const im = document.createElement('img'); im.src = url; im.draggable = false; b.appendChild(im); }
-            });
-            this.stateSkillWrap.appendChild(b);
+            }));
         };
         mkMagPage(398, 113, -1);   // 上翻
         mkMagPage(396, 143, 1);    // 下翻
         // 角色名（原版：Left+122 水平居中，Top+23，纯名字）
         this.stateNameEl = document.createElement('div');
-        this.stateNameEl.style.cssText = 'position:absolute;left:0;top:23px;width:232px;text-align:center;'
-            + 'font-size:12px;color:#f0e6c8;text-shadow:1px 1px 0 #000;';
+        this.stateNameEl.style.cssText = 'position:absolute;left:0;top:18px;width:232px;text-align:center;'
+            + 'font-size:14px;font-weight:bold;color:#ffd76a;text-shadow:1px 1px 0 #000;';
         win.appendChild(this.stateNameEl);
         // 关闭按钮（原版 DCloseState=371，位置 8,39）：正常态红X画在背景图里，
         // img 为按下态，按下才显示、抬起恢复（原版 Downed 语义）
-        const close = document.createElement('div');
-        close.style.cssText = 'position:absolute;left:8px;top:39px;width:16px;height:23px;cursor:pointer;';
-        close.addEventListener('click', () => { win.style.display = 'none'; });
-        win.appendChild(close);
-        this._libUrl('prguse', 371).then((url) => {
-            if (url && this.stateWin === win) {
-                const im = document.createElement('img');
-                im.src = url; im.draggable = false;
-                im.style.cssText = 'visibility:hidden;display:block;';
-                close.appendChild(im);
-                close.addEventListener('mousedown', () => { im.style.visibility = 'visible'; });
-                const restore = () => { im.style.visibility = 'hidden'; };
-                close.addEventListener('mouseup', restore);
-                close.addEventListener('mouseleave', restore);
-            }
-        });
+        win.appendChild(this._ddClose(196, 4, () => { win.style.display = 'none'; }));
         // 翻页箭头（原版 DPrevState=373 上 / DNextState=372 下，位置 7,128 / 7,187）
         const mkArrow = (idx, top, page) => {
-            const b = document.createElement('div');
-            b.style.cssText = `position:absolute;left:7px;top:${top}px;width:24px;height:23px;cursor:pointer;`;
-            b.addEventListener('click', () => {
+            win.appendChild(this._ddButton(page < 0 ? '▲' : '▼', 4, top, 30, 30, () => {
                 this.statePage = (this.statePage + page + 4) % 4;   // 0装备 1状态值 2属性数值 3技能 循环
                 this._refreshStateWin();
-            });
-            this._libUrl('prguse', idx).then((url) => {
-                if (url) { const im = document.createElement('img'); im.src = url; im.draggable = false; b.appendChild(im); }
-            });
-            win.appendChild(b);
+            }));
         };
         mkArrow(373, 128, -1);   // 上箭头 → 上一页
         mkArrow(372, 187, 1);    // 下箭头 → 下一页
@@ -1657,11 +1613,11 @@ export class PlayScene extends Scene {
             // 技能图标（原版 MagIcon[Effect*2]，Effect=0 的被动技能也用 magicon[0]）
             // 单击图标弹快捷键设置对话框（原版 DStMag1Click，仅图标可点，整行不可点）
             if (sk.effect != null && sk.effect >= 0) {
-                this._libUrl('magicon', sk.effect * 2).then((url) => {
+                Promise.resolve('assets/ui/sk_' + mid + '.png').then((url) => {
                     if (url) {
                         const im = document.createElement('img');
                         im.src = url; im.draggable = false;
-                        im.style.cssText = 'position:absolute;left:0;top:0;width:31px;height:33px;'
+                        im.style.cssText = 'position:absolute;left:0;top:0;width:33px;height:33px;border-radius:50%;'
                             + (passive ? '' : 'cursor:pointer;');
                         if (!passive) {
                             im.title = '点击设置快捷键';
@@ -1684,14 +1640,10 @@ export class PlayScene extends Scene {
             if (!passive) {
                 // 快捷键图标（原版 keyimg Prguse[650..657]，此资源缺失改用 DKeySelDlg 的 F 键图 232/234/...）
                 if (sk.key) {
-                    this._libUrl('prguse', 232 + (sk.key - 1) * 2).then((url) => {
-                        if (url) {
-                            const im = document.createElement('img');
-                            im.src = url; im.draggable = false;
-                            im.style.cssText = 'position:absolute;left:137px;top:8px;';
-                            row.appendChild(im);
-                        }
-                    });
+                    const kk = document.createElement('div');
+                    kk.textContent = '键 ' + sk.key;
+                    kk.style.cssText = 'position:absolute;left:118px;top:10px;font-size:12px;font-weight:bold;color:#ffd76a;';
+                    row.appendChild(kk);
                 } else {
                     const unset = document.createElement('div');
                     unset.textContent = '未设置';
@@ -1712,26 +1664,21 @@ export class PlayScene extends Scene {
         if (this.keySetupEl) { this.keySetupEl.remove(); this.keySetupEl = null; }
         const W = 376, H = 179;
         const box = document.createElement('div');
-        box.style.cssText = `position:absolute;left:${Math.floor((SCREEN_WIDTH - W) / 2)}px;`
-            + `top:${Math.floor((SCREEN_HEIGHT - H) / 2)}px;width:${W}px;height:${H}px;`
-            + 'z-index:9999;font-family:SimSun,serif;color:#c0c0c0;font-size:12px;pointer-events:auto;';
+        box.className = 'dwin';
+        box.style.cssText = `position:absolute;left:${Math.floor((SCREEN_WIDTH - W * 1.3) / 2)}px;`
+            + `top:${Math.floor((SCREEN_HEIGHT - H * 1.3) / 2)}px;width:${W}px;height:${H}px;transform:scale(1.3);transform-origin:0 0;`
+            + 'z-index:9999;font-family:"DDSerif","Microsoft YaHei",serif;color:#efe3c4;font-size:13px;pointer-events:auto;';
         this.keySetupEl = box;
 
         // 当前选择（原版 MagKeyCurKey）：打开时 = 当前快捷键，点 F 键/None 改选择，点确定才发消息
         let selKey = sk.key || 0;
 
         // 背景 Prguse[229]
-        this._libUrl('prguse', 229).then((url) => {
-            if (url && this.keySetupEl === box) {
-                const bg = document.createElement('img');
-                bg.src = url; bg.draggable = false;
-                bg.style.cssText = 'position:absolute;left:0;top:0;';
-                box.insertBefore(bg, box.firstChild);
-            }
-        });
+        box.appendChild(this._ddOuterFrame('ui_dlg_npc', 12));
+        box.appendChild(this._ddSlotBg(45, 22, 40, 40));
 
         // 技能图标 MagIcon[Effect*2]（背景图标槽 @47,24 36x37，图标 32x32 居中放 @49,26）
-        this._libUrl('magicon', sk.effect * 2).then((url) => {
+        Promise.resolve('assets/ui/sk_' + magicId + '.png').then((url) => {
             if (url && this.keySetupEl === box) {
                 const im = document.createElement('img');
                 im.src = url; im.draggable = false;
@@ -1743,70 +1690,25 @@ export class PlayScene extends Scene {
         // 提示文字（原版 DKeySelDlgDirectPaint TextOut @95,38 → 图标右侧 @91,31）
         const name = document.createElement('div');
         name.textContent = sk.name + '快捷键盘被设置为.';
-        name.style.cssText = 'position:absolute;left:91px;top:31px;white-space:nowrap;color:#c0c0c0;';
+        name.style.cssText = 'position:absolute;left:96px;top:33px;white-space:nowrap;color:#efe3c4;';
         box.appendChild(name);
 
-        // F1-F8 键（原版 DKsF1..F8 @25/57/89/121/160/192/224/256,78 → 229 槽位 @34/66/98/130/171/203/235/267,83）
-        // 正常态透明、当前键高亮 idx+1、按下显示 idx（原版 DKsF1DirectPaint 语义）
-        const F_LEFT = [34, 66, 98, 130, 171, 203, 235, 267];
-        const F_TOP = 83;
-        const fIms = [];
-        const refreshKeys = () => {
-            for (let k = 1; k <= 8; k++) {
-                const im = fIms[k - 1];
-                if (selKey === k) {
-                    this._libUrl('prguse', 232 + (k - 1) * 2 + 1).then((url) => {
-                        if (url && this.keySetupEl === box) { im.src = url; im.style.visibility = 'visible'; }
-                    });
-                } else {
-                    im.style.visibility = 'hidden';
-                }
-            }
-        };
+        // 1-8 键 + 无（照原版：点键只是选中，点确定才生效；无 = 清除）
+        const keyBtns = [];
+        const refreshKeys = () => keyBtns.forEach(([k, el]) => { el.style.filter = selKey === k ? 'brightness(1.6) sepia(.5)' : ''; el.style.color = selKey === k ? '#fff4c8' : '#ffe6a6'; });
         for (let k = 1; k <= 8; k++) {
-            const idx = 232 + (k - 1) * 2;
-            const btn = document.createElement('div');
-            btn.style.cssText = `position:absolute;left:${F_LEFT[k - 1]}px;top:${F_TOP}px;width:29px;height:30px;cursor:pointer;`;
-            const im = document.createElement('img');
-            im.draggable = false;
-            im.style.cssText = 'position:absolute;left:0;top:0;visibility:hidden;';
-            btn.appendChild(im);
-            fIms.push(im);
-            btn.addEventListener('mousedown', () => {
-                this._libUrl('prguse', idx).then((url) => {
-                    if (url && this.keySetupEl === box) { im.src = url; im.style.visibility = 'visible'; }
-                });
-            });
-            btn.addEventListener('mouseup', refreshKeys);
-            btn.addEventListener('mouseleave', refreshKeys);
-            btn.addEventListener('click', () => { selKey = k; refreshKeys(); });
-            box.appendChild(btn);
+            const el = this._ddButton(String(k), 16 + (k - 1) * 38, 78, 34, 32, () => { selKey = k; refreshKeys(); });
+            keyBtns.push([k, el]); box.appendChild(el);
         }
+        const noneBtn = this._ddButton('无', 322, 78, 40, 32, () => { selKey = 0; refreshKeys(); });
+        noneBtn.title = '清除快捷键'; keyBtns.push([0, noneBtn]); box.appendChild(noneBtn);
         refreshKeys();
-
-        // None 按钮（原版 DKsNone @296,78 → 229 @299,83）：点击清除（key=0）
-        const noneBtn = document.createElement('div');
-        noneBtn.style.cssText = 'position:absolute;left:299px;top:83px;width:39px;height:30px;cursor:pointer;';
-        noneBtn.title = '清除快捷键';
-        noneBtn.addEventListener('click', () => { selKey = 0; refreshKeys(); });
-        box.appendChild(noneBtn);
-
-        // 确定按钮（原版 DKsOk @296,120 → 229 确定槽 @222,131）：应用选择并关闭
-        const ok = document.createElement('div');
-        ok.style.cssText = 'position:absolute;left:222px;top:131px;width:73px;height:30px;cursor:pointer;';
-        ok.addEventListener('click', () => {
+        box.appendChild(this._ddButton('取消', 110, 130, 90, 34, () => { this.keySetupEl.remove(); this.keySetupEl = null; }));
+        box.appendChild(this._ddButton('确定', 222, 130, 90, 34, () => {
             this.conn.send('magicKeyChange', { magicId, key: selKey });
             this.keySetupEl.remove();
             this.keySetupEl = null;
-        });
-        box.appendChild(ok);
-
-        // 取消按钮：关闭不应用（放在确定左侧）
-        const cancel = document.createElement('div');
-        cancel.textContent = '取消';
-        cancel.style.cssText = 'position:absolute;left:150px;top:138px;cursor:pointer;color:#e8d9b0;';
-        cancel.addEventListener('click', () => { this.keySetupEl.remove(); this.keySetupEl = null; });
-        box.appendChild(cancel);
+        }));
 
         gui.appendChild(box);
     }
@@ -1820,14 +1722,10 @@ export class PlayScene extends Scene {
         this.stateBodyEl.innerHTML = '';
         // 装备页底图用 Prguse3[29]（男）/ [30]（女）：168×234，比 Prguse[376/377]（168×199）高，
         // 自带底部一排 4 个格子（护身符/腰带/靴子/宝石），装备页才完整。
-        const bodyIdx = p.sex === 1 ? 30 : 29;
-        this._libUrl('prguse3', bodyIdx).then((url) => {
-            if (url && this.stateWin && this.stateBodyEl) {
-                const im = document.createElement('img');
-                im.src = url; im.draggable = false;
-                this.stateBodyEl.appendChild(im);
-            }
-        });
+        const doll = document.createElement('img');
+        doll.src = 'assets/ui/ui_state_doll.png'; doll.draggable = false;
+        doll.style.cssText = 'width:168px;height:234px;display:block;';
+        this.stateBodyEl.appendChild(doll);
 
         // 人物身上的装备叠加层（在裸身底图之上、点击热区之下）
         if (this.stateFigureEl) {
@@ -1876,18 +1774,20 @@ export class PlayScene extends Scene {
         // 只在这些槽位画图标；最后一排（护身符/腰带/靴子/宝石）在原版没有视觉（376 只到 y=251），
         // 保留 DSW 透明热区（可点击）但不画格子/图标。
         // Prguse3[29]/[30] 自带 8+4 个格子凹槽；头盔/衣服/武器仍画在人物形象上，其余槽位显示图标
-        const ICON_SLOTS = new Set([2, 3, 5, 6, 7, 8, 9, 10, 11, 12]);
+        const ICON_SLOTS = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
         this.stateEquipEl.innerHTML = '';
         this._hideStateItemDesc();
         for (const [slot, x, y, w, h] of EQUIP_SLOTS) {
             const it = equipped[slot];
             const cell = document.createElement('div');
-            cell.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;cursor:pointer;`
-                + 'display:flex;align-items:center;justify-content:center;overflow:hidden;';
+            const sw = Math.max(w, 30); const sh = Math.max(h, 30);
+            cell.style.cssText = `position:absolute;left:${x + (w - sw) / 2}px;top:${y + (h - sh) / 2}px;width:${sw}px;height:${sh}px;cursor:pointer;`
+                + 'display:flex;align-items:center;justify-content:center;overflow:hidden;'
+                + 'background:url(assets/ui/hud_slot.png) center/100% 100% no-repeat;';
             cell.dataset.slot = String(slot);
             if (it) {
                 if (ICON_SLOTS.has(slot)) {
-                    this._libUrl('stateitem', it.looks).then((url) => {
+                    this._libUrl('items', it.looks).then((url) => {
                         if (!url) return;
                         const im = document.createElement('img');
                         im.src = url; im.draggable = false;
@@ -2010,28 +1910,23 @@ export class PlayScene extends Scene {
         if (this.bagPanel) return;
         const gui = this.manager.winManager.container;
         const panel = document.createElement('div');
-        panel.style.cssText = 'position:absolute;left:0;top:0;width:336px;height:270px;'
-            + 'pointer-events:auto;font-family:SimSun,serif;color:#e8d9b0;';
+        // 打到天亮：版式、格子坐标照原版 DItemBag，只换美术（GPT 外框 ui_win_land + 格子 hud_slot），整体放大 1.3 倍
+        panel.className = 'dwin';
+        panel.style.cssText = 'position:absolute;left:24px;top:40px;width:336px;height:270px;transform:scale(1.3);transform-origin:0 0;'
+            + 'pointer-events:auto;font-family:"DDSerif","Microsoft YaHei",serif;color:#efe3c4;';
         panel.style.display = 'none';
-        // 背景 Prguse[3]（标记 win-drag 用于拖动）
-        this._libUrl('prguse', 3).then((url) => {
-            if (url && this.bagPanel === panel) {
-                const bg = document.createElement('img');
-                bg.src = url; bg.draggable = false;
-                bg.className = 'win-drag';
-                bg.style.cssText = 'position:absolute;left:0;top:0;';
-                panel.insertBefore(bg, panel.firstChild);
-            }
-        });
-        // 关闭按钮（红X，原版 DCloseBag 309,203）
-        const close = document.createElement('div');
-        close.style.cssText = 'position:absolute;left:309px;top:203px;width:14px;height:20px;cursor:pointer;';
-        close.addEventListener('click', () => { panel.style.display = 'none'; });
-        panel.appendChild(close);
+        panel.appendChild(this._ddOuterFrame('ui_win_land'));
+        for (let i = 0; i < 40; i++) panel.appendChild(this._ddSlotBg(20 + (i % 8) * 36, 13 + Math.floor(i / 8) * 32, 36, 32));
+        const goldLabel = document.createElement('div');
+        goldLabel.textContent = '金币';
+        goldLabel.style.cssText = 'position:absolute;left:22px;top:185px;font-size:12px;font-weight:bold;color:#ffd76a;text-shadow:1px 1px 0 #000;';
+        panel.appendChild(goldLabel);
+        // 关闭按钮（原版 DCloseBag 在右下）
+        panel.appendChild(this._ddClose(298, 192, () => { panel.style.display = 'none'; }));
         // 金币（原版 DGold 10,190）
         // 金币（原版 DItemBagDirectPaint：TextOut(Left+64, Top+185, GetGoldStr) 白色千分位）
         this.goldEl = document.createElement('div');
-        this.goldEl.style.cssText = 'position:absolute;left:64px;top:185px;font-size:12px;color:#ffffff;text-shadow:1px 1px 0 #000;';
+        this.goldEl.style.cssText = 'position:absolute;left:64px;top:185px;font-size:12px;color:#ffe9a8;text-shadow:1px 1px 0 #000;';
         panel.appendChild(this.goldEl);
         // 物品描述区（原版 DItemBagDirectPaint：鼠标悬停物品在 Left+70,Top+215 起显示 3 行描述）
         this.bagDescEl = document.createElement('div');
@@ -2276,6 +2171,20 @@ export class PlayScene extends Scene {
         bg.src = 'assets/ui/' + name + '.png'; bg.draggable = false;
         bg.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;';
         return bg;
+    }
+    // 大窗口外框：图铺在内容区外面一圈（m 像素），原版坐标不用改
+    _ddOuterFrame(name, m = 18) {
+        const bg = document.createElement('img');
+        bg.src = 'assets/ui/' + name + '.png'; bg.draggable = false; bg.className = 'win-drag';
+        bg.style.cssText = 'position:absolute;left:' + (-m) + 'px;top:' + (-m) + 'px;width:calc(100% + ' + (2 * m) + 'px);height:calc(100% + ' + (2 * m) + 'px);pointer-events:none;';
+        return bg;
+    }
+    // 格子底图（hud_slot）
+    _ddSlotBg(x, y, w, h) {
+        const d = document.createElement('div');
+        d.style.cssText = 'position:absolute;left:' + x + 'px;top:' + y + 'px;width:' + w + 'px;height:' + h + 'px;pointer-events:none;'
+            + 'background:url(assets/ui/hud_slot.png) center/100% 100% no-repeat;';
+        return d;
     }
     _ddClose(x, y, cb) {
         const b = document.createElement('div');
