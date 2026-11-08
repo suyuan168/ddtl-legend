@@ -31,4 +31,9 @@ window.__crop0 = (cs, o = {}) => {
   const g = out.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(c, x0, y0, bw, bh, 0, 0, out.width, out.height); return out;
 };
 window.__shrinkEach = (cs, o = {}) => o.cell > 3 ? window.__shrink0(cs, o) : window.__crop0(cs, o);
+// 认新图：发提示词前记下页面上“生成图”的张数，张数变多时取最后一张。
+// （不能按图片地址判断：页面重新渲染会给旧图换新地址，会把旧图当新图，或漏掉真正的新图）
+window.__genImgs = () => [...document.querySelectorAll('img')].filter(i => /Generated/.test(i.alt) && i.naturalWidth > 300 && i.complete);
+if (!window.__send0) { window.__send0 = window.__send; window.__send = async (t) => { window.__genCount = window.__genImgs().length; return window.__send0(t); }; }
+window.__newImg = () => { const g = window.__genImgs(); return g.length > (window.__genCount || 0) ? g[g.length - 1] : null; };
 'gpt-kit ok';

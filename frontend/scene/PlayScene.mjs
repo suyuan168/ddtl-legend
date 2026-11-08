@@ -118,8 +118,8 @@ const FX_FRAMES = {
     fireRing:     { lib: 'magic',  base: 900,  frames: 6,  ft: 80 },   // 抗拒火环（原版 EffectBase[5]=900，6 帧金色光环）
     spaceMove:    { lib: 'magic',  base: 1600, frames: 10, ft: 60 },   // 瞬息移动传送现身（原版 SPACEMOVE_SHOW2=1600）
     // 飞行弹道（EffectBase + FLYBASE 10）
-    fireball:     { lib: 'magic',  base: 10,   frames: 6,  ft: 80 },   // 火球飞行（0+10）
-    bigfireball:  { lib: 'magic',  base: 410,  frames: 6,  ft: 80 },   // 大火球飞行（400+10）
+    fireball:     { lib: 'magic',  base: 10,   frames: 6,  ft: 80, dirStride: 10 },   // 火球飞行（0+10）；打到天亮：按 16 方向转，火尾跟在后面
+    bigfireball:  { lib: 'magic',  base: 410,  frames: 6,  ft: 80, dirStride: 10 },   // 大火球飞行（400+10）
     soulfu:       { lib: 'magic',  base: 1160, frames: 3,  ft: 50, dirStride: 10 },  // 灵魂火符飞行（原版 TExploBujaukEffect base=1160，3 帧×50ms，Dir16*10 方向）
     // 远程怪飞矢（射箭/投斧）：mon5 库箭矢帧 = 2609 + Dir16*10（16 方向，原版 magiceff.pas ARCHERBASE 段，ImgLib=WMon5）
     flyAxe:       { lib: 'mon5',   base: 2609, frames: 1,  dirStride: 10 },
@@ -196,6 +196,8 @@ export class PlayScene extends Scene {
         this.effects = [];           // 技能特效（飞行/命中/地面火墙）
         this.damageNumbers = [];     // 伤害飘字
         this._fxCache = new Map();   // 特效帧纹理缓存 'lib/index' -> canvas
+        // 打到天亮：进图就预载技能特效图集，免得第一次放技能时图还没下完、看不到特效
+        for (const n of ['magic', 'magic2']) { const l = getLib(n); if (l && l.load) l.load().catch(() => {}); }
         this._zTop = 100;            // 窗口 z-index 计数器（点击前置递增）
         this._dragCleaners = [];     // 窗口拖动监听清理函数
         this._canvas = document.getElementById('screen');

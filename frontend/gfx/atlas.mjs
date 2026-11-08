@@ -46,10 +46,18 @@ export class AtlasLib {
         await this.load();
         const f = this.frames[index];
         if (!f) return null;
-        const [x, y, w, h, px, py] = f;
-        const canvas = createCanvas(w, h);
-        canvas.getContext('2d').drawImage(this.image, x, y, w, h, 0, 0, w, h);
-        const tex = { canvas, px, py, width: w, height: h };
+        const [x, y, w, h, px, py, rot] = f;
+        let canvas;
+        if (rot) {
+            // 带旋转角度的帧（特效的其他方向）：按角度转出来，画布取旋转后的外接框
+            const r = rot * Math.PI / 180; const rw = Math.ceil(Math.abs(w * Math.cos(r)) + Math.abs(h * Math.sin(r))); const rh = Math.ceil(Math.abs(w * Math.sin(r)) + Math.abs(h * Math.cos(r)));
+            canvas = createCanvas(rw, rh); const g = canvas.getContext('2d');
+            g.translate(rw / 2, rh / 2); g.rotate(r); g.drawImage(this.image, x, y, w, h, -w / 2, -h / 2, w, h);
+        } else {
+            canvas = createCanvas(w, h);
+            canvas.getContext('2d').drawImage(this.image, x, y, w, h, 0, 0, w, h);
+        }
+        const tex = { canvas, px, py, width: canvas.width, height: canvas.height };
         this.textures.set(index, tex);
         return tex;
     }

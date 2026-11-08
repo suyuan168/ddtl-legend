@@ -13,3 +13,6 @@ gamedata/Mir200/Map
 # --- macOS ---
 .DS_Store
 **/.DS_Store
+
+# --- 字体源文件太大，不进库（子集字体在 frontend/assets/fonts） ---
+art/fonts/*.otf
