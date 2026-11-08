@@ -362,6 +362,7 @@ const NPC_PLACEHOLDER_APPR = new Set([
 
 /** GetNpcOffset：appr → NPC 帧偏移；占位图 appr 回退到默认外观（appr=0）。 */
 export function getNpcOffset(appr) {
+    if (appr >= 900) return (appr - 900) * MERCHANTFRAME;   // 打到天亮原创 NPC：每个占 60 帧
     if (NPC_PLACEHOLDER_APPR.has(appr)) appr = 0;
     if (appr >= 0 && appr <= 22) return MERCHANTFRAME * appr;
     if (appr === 23) return 1380;

@@ -157,6 +157,7 @@ export class MobileHud {
         e.preventDefault(); e.stopPropagation();
         // 技能栏设置面板打开时：点技能放到对应键，点别处关闭
         if (this.picker) { this._pickerTap(x, y); return; }
+        if (this.storage) { this._storageTap(x, y); return; }
         const b = this._btnAt(x, y);
         // 技能键：松手时才放技能；按住 0.45 秒以上 = 打开技能栏设置
         if (b && b.id.startsWith('sk')) { this.pressed.set(e.pointerId, b.id); this.skDown = { id: b.id, at: Date.now(), pid: e.pointerId }; return; }
@@ -197,6 +198,41 @@ export class MobileHud {
             if (sk.key || this._autoTried.has(mid)) continue;
             const free = SKILL_KEYS.find((k) => !bound[k]); if (!free) return;
             this._autoTried.add(mid); this._setKey(mid, free); bound[free] = { mid, sk };
+        }
+    }
+    // —— 仓库：左边仓库、右边背包，点一件就存进去 / 取出来
+    openStorage(items) { this.storage = { items }; }
+    _storageRect() { const w = 760; const h = 380; return { x: W / 2 - w / 2, y: Math.max(20, H / 2 - h / 2 - 30), w, h }; }
+    _storageCells(R) {
+        const out = []; const cs = 50; const cols = 6;
+        const bag = this.scene.self.items || [];
+        const put = (list, x0, kind) => list.forEach((it, i) => out.push({ it, kind, x: x0 + (i % cols) * (cs + 4), y: R.y + 56 + Math.floor(i / cols) * (cs + 4), w: cs, h: cs }));
+        put(this.storage.items.slice(0, 36), R.x + 24, 'take'); put((Array.isArray(bag) ? bag : Object.values(bag)).filter(Boolean).slice(0, 36), R.x + R.w / 2 + 14, 'store');
+        return out;
+    }
+    _storageTap(x, y) {
+        const R = this._storageRect();
+        if (x < R.x || x > R.x + R.w || y < R.y || y > R.y + R.h || (x > R.x + R.w - 44 && y < R.y + 40)) { this.storage = null; return; }
+        const c = this._storageCells(R).find((q) => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (!c) return;
+        const s = this.scene;
+        s.conn.send(c.kind === 'take' ? 'storageTake' : 'storageStore', { makeIndex: c.it.makeIndex });
+        setTimeout(() => s.conn.send('storageOpen', {}), 150);   // 服务端存取后不推仓库列表，再要一次
+    }
+    _renderStorage(ctx) {
+        const R = this._storageRect();
+        ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, 0, W, H);
+        if (!pic(ctx, 'hud_frame_panel', R.x - 8, R.y - 8, R.w + 16, R.h + 16)) frame(ctx, R.x, R.y, R.w, R.h, 10);
+        ctx.textBaseline = 'middle'; ctx.font = 'bold 16px "DDSerif","Microsoft YaHei",serif'; ctx.fillStyle = GOLD_HI;
+        ctx.textAlign = 'left'; ctx.fillText('仓库（' + this.storage.items.length + '/45）  点物品取出', R.x + 24, R.y + 30);
+        ctx.fillText('背包  点物品存入', R.x + R.w / 2 + 14, R.y + 30);
+        ctx.textAlign = 'center'; ctx.fillText('✕', R.x + R.w - 24, R.y + 22);
+        ctx.fillStyle = 'rgba(200,162,74,.5)'; ctx.fillRect(R.x + R.w / 2, R.y + 50, 1, R.h - 70);
+        for (const c of this._storageCells(R)) {
+            if (!pic(ctx, 'hud_slot', c.x - 2, c.y - 2, c.w + 4, c.h + 4)) { rr(ctx, c.x, c.y, c.w, c.h, 4); ctx.fillStyle = 'rgba(10,8,6,.62)'; ctx.fill(); }
+            const tex = c.it.looks != null ? this._itemTex(c.it.looks) : null;
+            if (tex) ctx.drawImage(tex.canvas, c.x + 6, c.y + 4, c.w - 12, c.h - 12);
+            ctx.font = '10px "DDSerif","Microsoft YaHei",serif'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; const nm = (c.it.name || '').slice(0, 4);
+            ctx.strokeText(nm, c.x + c.w / 2, c.y + c.h - 6); ctx.fillStyle = '#f0e2c0'; ctx.fillText(nm, c.x + c.w / 2, c.y + c.h - 6);
         }
     }
     _pickerRect() { const list = this._activeSkills(); const w = 360; const h = 70 + Math.max(1, list.length) * 40; return { x: W / 2 - w / 2, y: Math.max(40, H / 2 - h / 2 - 40), w, h, list }; }
@@ -343,12 +379,14 @@ export class MobileHud {
         }
         if (this.skDown && Date.now() - this.skDown.at > 250) { const b = this.buttons.find((q) => q.id === this.skDown.id); const k = Math.min(1, (Date.now() - this.skDown.at) / 450); ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.lineWidth = 3; ctx.strokeStyle = GOLD_HI; ctx.stroke(); }
         if (this.picker) this._renderPicker(ctx);
+        if (this.storage) this._renderStorage(ctx);
         ctx.restore();
     }
 
     // 任务追踪：先放本图的打怪目标，等任务系统接上再换
     _questLines(p) {
         const lv = p.level || 1;
+        if (this.scene.mapActor && /^dt/.test(this.scene.mapActor.mapId || '')) return [['天亮城（安全区）', '#9be29b'], ['东门出城去晨雾林，或找向导', '#ffe27a'], ['广场四周有商铺、南边是仓库', '#c8c0b0']];
         if (lv < 3) return [['晨雾林：击败角兽', '#9be29b'], ['升到 3 级（' + lv + '/3）', '#ffe27a'], ['拾取掉落的金币和药水', '#c8c0b0']];
         if (lv < 6) return [['晨雾林：清剿矿坑尸鬼', '#9be29b'], ['升到 6 级（' + lv + '/6）', '#ffe27a'], ['西边残柱一带', '#c8c0b0']];
         return [['晨雾林：讨伐洞穴甲虫', '#9be29b'], ['升到 10 级（' + lv + '/10）', '#ffe27a'], ['北边林子深处', '#c8c0b0']];

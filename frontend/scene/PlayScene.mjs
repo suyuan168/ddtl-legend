@@ -1150,6 +1150,9 @@ export class PlayScene extends Scene {
                     if (!still) this._clearSellSpot();
                 }
                 break;
+            case 'storage':
+                if (this.mobile) this.mobile.openStorage(msg.items || []);
+                break;
             case 'npcSay':
                 this._showNpcDialog(msg);
                 break;
@@ -1170,6 +1173,7 @@ export class PlayScene extends Scene {
                 for (const e of msg.nearby || []) this.entities.set(e.id, e);
                 for (const g of msg.groundItems || []) this.groundItems.set(g.id, g);
                 if (msg.map) {
+                    if (this.snapshot) this.snapshot.map = msg.map;   // 小地图上的地图名跟着换
                     this.mapActor.enter(msg.map.name)
                         .then(() => { this._miniMapIndex = msg.miniMapIndex; this._loadMiniMapTexture(this._miniMapIndex); })
                         .catch(console.error);
@@ -2529,7 +2533,11 @@ export class PlayScene extends Scene {
                 a.textContent = label;
                 a.style.cssText = 'color:#ffd76a;text-decoration:underline;cursor:pointer;'
                     + 'text-shadow:1px 1px 0 #000;pointer-events:auto;';
-                a.addEventListener('click', () => this.conn.send('npcSelect', { npcId, value }));
+                a.addEventListener('click', () => {
+                    // 打到天亮：仓库的存/取直接打开仓库面板（服务端 storageOpen）
+                    if (/^@(storage|getback)$/i.test(value)) { this._closeNpcDialog(); this.conn.send('storageOpen', {}); return; }
+                    this.conn.send('npcSelect', { npcId, value });
+                });
                 container.appendChild(a);
             } else {
                 appendText(inner);

@@ -103,7 +103,7 @@ export class ActorSprite {
 
         // 怪物/NPC：单层，外观 offset + cf
         const offset = e.type === 'npc' ? A.getNpcOffset(e.appr) : A.getMonOffset(e.appr);
-        const lib = e.type === 'npc' ? 'npc' : A.getMonImgLib(e.appr);
+        const lib = e.type === 'npc' ? (e.appr >= 900 ? 'ddnpc' : 'npc') : A.getMonImgLib(e.appr);   // 打到天亮：appr 900+ 用我们自己的 NPC 图库
         return [{ lib, index: offset + cf }];
     }
 

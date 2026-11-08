@@ -1,0 +1,242 @@
+{
+ "npcs": [
+  {
+   "map": "dtw",
+   "x": 10,
+   "y": 9,
+   "name": "铁匠·巴隆",
+   "look": "n_smith",
+   "script": "dd_weapon"
+  },
+  {
+   "map": "dta",
+   "x": 10,
+   "y": 9,
+   "name": "甲胄师·赛拉",
+   "look": "n_armorer",
+   "script": "dd_armor"
+  },
+  {
+   "map": "dtp",
+   "x": 10,
+   "y": 9,
+   "name": "药师·老林",
+   "look": "n_alchemist",
+   "script": "dd_potion"
+  },
+  {
+   "map": "dts",
+   "x": 10,
+   "y": 9,
+   "name": "杂货商·福德",
+   "look": "n_merchant",
+   "script": "dd_store"
+  },
+  {
+   "map": "dtk",
+   "x": 10,
+   "y": 9,
+   "name": "仓库管理员·莫恩",
+   "look": "n_keeper",
+   "script": "dd_storage"
+  },
+  {
+   "map": "dt0",
+   "x": 32,
+   "y": 49,
+   "name": "药贩·小禾",
+   "look": "n_alchemist",
+   "script": "dd_potion"
+  },
+  {
+   "map": "dt0",
+   "x": 48,
+   "y": 49,
+   "name": "兵器贩·铁头",
+   "look": "n_smith",
+   "script": "dd_weapon"
+  },
+  {
+   "map": "dt0",
+   "x": 33,
+   "y": 64,
+   "name": "保管员·阿杜",
+   "look": "n_keeper",
+   "script": "dd_storage"
+  },
+  {
+   "map": "dt0",
+   "x": 70,
+   "y": 37,
+   "name": "城门卫兵",
+   "look": "n_guard",
+   "script": "dd_guard",
+   "plain": true
+  },
+  {
+   "map": "dt0",
+   "x": 44,
+   "y": 42,
+   "name": "向导·艾琳",
+   "look": "n_guide",
+   "script": "dd_guide"
+  }
+ ],
+ "rooms": [
+  {
+   "id": "dtw",
+   "name": "铁匠铺",
+   "img": "in_smithy",
+   "door": [
+    29,
+    26
+   ],
+   "out": [
+    29,
+    28
+   ],
+   "exit": [
+    [
+     9,
+     18
+    ],
+    [
+     10,
+     18
+    ],
+    [
+     11,
+     18
+    ]
+   ],
+   "arrive": [
+    10,
+    16
+   ]
+  },
+  {
+   "id": "dta",
+   "name": "甲胄铺",
+   "img": "in_armory",
+   "door": [
+    51,
+    26
+   ],
+   "out": [
+    51,
+    28
+   ],
+   "exit": [
+    [
+     9,
+     18
+    ],
+    [
+     10,
+     18
+    ],
+    [
+     11,
+     18
+    ]
+   ],
+   "arrive": [
+    10,
+    16
+   ]
+  },
+  {
+   "id": "dtp",
+   "name": "药铺",
+   "img": "in_apothecary",
+   "door": [
+    19,
+    37
+   ],
+   "out": [
+    19,
+    39
+   ],
+   "exit": [
+    [
+     9,
+     18
+    ],
+    [
+     10,
+     18
+    ],
+    [
+     11,
+     18
+    ]
+   ],
+   "arrive": [
+    10,
+    16
+   ]
+  },
+  {
+   "id": "dts",
+   "name": "杂货铺",
+   "img": "in_store",
+   "door": [
+    61,
+    37
+   ],
+   "out": [
+    61,
+    39
+   ],
+   "exit": [
+    [
+     9,
+     18
+    ],
+    [
+     10,
+     18
+    ],
+    [
+     11,
+     18
+    ]
+   ],
+   "arrive": [
+    10,
+    16
+   ]
+  },
+  {
+   "id": "dtk",
+   "name": "仓库",
+   "img": "in_warehouse",
+   "door": [
+    29,
+    62
+   ],
+   "out": [
+    29,
+    64
+   ],
+   "exit": [
+    [
+     9,
+     18
+    ],
+    [
+     10,
+     18
+    ],
+    [
+     11,
+     18
+    ]
+   ],
+   "arrive": [
+    10,
+    16
+   ]
+  }
+ ]
+}

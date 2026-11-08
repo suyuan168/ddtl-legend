@@ -17,6 +17,8 @@ const DIRS = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
 const MIRROR = { w: 'e', sw: 'se', nw: 'ne', e: 'w', se: 'sw', ne: 'nw' };
 // 人物动作表 HA 和怪物动作表 MA14（见 frontend/actor/actorData.mjs）
 const HA = { stand: [0, 4, 4, 'stand'], walk: [64, 6, 2, 'walk'], run: [128, 6, 2, 'walk'], hit: [200, 6, 2, 'atk'], spell: [392, 6, 2, 'atk'], struck: [472, 3, 5, 'struck'], die: [536, 4, 4, 'die'] };
+const MA50 = { stand: [0, 4, 6, 'stand'] };   // NPC：只有站立待机
+const NPC_SLOT = 60;
 const MA14 = { stand: [0, 4, 6, 'stand'], walk: [80, 6, 4, 'walk'], attack: [160, 6, 4, 'atk'], struck: [240, 2, 0, 'struck'], die: [260, 10, 0, 'die'], death: [340, 10, 0, 'dead'] };
 const CELL_X = 24; const FOOT_Y = 26; // 格子中心偏下一点
 
@@ -40,6 +42,7 @@ async function strip(pre, act, dir) {
   if (existsSync(f)) res = await loadStrip(f);
   else if (MIRROR[dir] && existsSync(join(RAW, `${pre}_${act}_${MIRROR[dir]}.png`))) { res = await loadStrip(join(RAW, `${pre}_${act}_${MIRROR[dir]}.png`)); flip = true; }
   else if (act === 'die' && existsSync(join(RAW, `${pre}_die_se.png`))) res = await loadStrip(join(RAW, `${pre}_die_se.png`));
+  else if (pre.startsWith('n_') && act === 'stand' && existsSync(join(RAW, `${pre}.png`))) res = await loadStrip(join(RAW, `${pre}.png`));   // NPC 只出一个朝向，各方向共用
   const out = res ? { ...res, flip } : null; cache.set(key, out); return out;
 }
 // 取一帧：缩放、可镜像，返回 { buf(PNG), w, h, px, py }
@@ -110,6 +113,13 @@ if (lib === 'hum') {
     if (!existsSync(join(RAW, pre + '_stand_s.png')) && !existsSync(join(RAW, pre + '_stand_se.png'))) { console.log('还没有图', pre); continue; }
     const fr = await buildFrames(pre, HA, 84);
     for (let ap = a; ap <= b; ap++) for (const [k, v] of Object.entries(fr)) entries.push([600 * ap + Number(k), v]);
+  }
+} else if (lib === 'ddnpc') {
+  // 用法：ddnpc n_smith:0:86 n_guide:1:88（appr = 900 + 槽位）
+  for (const arg of args) {
+    const [pre, slot, h] = arg.split(':'); if (!existsSync(join(RAW, pre + '.png'))) { console.log('还没有图', pre); continue; }
+    const fr = await buildFrames(pre, MA50, Number(h || 84));
+    for (const [k, v] of Object.entries(fr)) entries.push([NPC_SLOT * Number(slot) + Number(k), v]);
   }
 } else {
   for (const arg of args) {
