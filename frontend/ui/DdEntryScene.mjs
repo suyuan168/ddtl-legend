@@ -14,14 +14,30 @@ const JOBS = [
 const IMG = {};
 const KEYS = ['cls_warrior', 'cls_mage', 'cls_spirit', 'bg_title', 'ui_sel_bg', 'ui_stage', 'ui_panel_stone', 'ui_slot_stone', 'ui_btn_stone', 'ui_btn_stone_on',
     'ui_icon_warrior', 'ui_icon_mage', 'ui_icon_spirit', 'ui_icon_male', 'ui_icon_female', 'title_logo',
-    'btn_start', 'btn_create', 'btn_delete', 'btn_exit', 'btn_submit', 'btn_select', 'btn_random', 'btn_back', 'btn_enter'];
-for (const k of KEYS) { const im = new Image(); im.onload = () => { IMG[k] = im; }; im.src = 'assets/ui/' + k + (k === 'bg_title' || k === 'ui_sel_bg' || k === 'ui_stage' ? '.jpg' : '.png'); }
+    'btn_start', 'btn_create', 'btn_delete', 'btn_exit', 'btn_submit', 'btn_select', 'btn_random', 'btn_back', 'btn_enter',
+    'cls_warrior2', 'cls_mage2', 'cls_spirit2', 'ui_sel_bg2', 'txt_newchar', 'txt_selchar', 'txt_name', 'txt_job', 'txt_sex', 'txt_warrior', 'txt_mage', 'txt_spirit'];
+const JPG = new Set(['bg_title', 'ui_sel_bg', 'ui_stage', 'ui_sel_bg2']);
+for (const k of KEYS) { const im = new Image(); im.onload = () => { IMG[k] = im; }; im.src = 'assets/ui/' + k + (JPG.has(k) ? '.jpg' : '.png'); }
+// 固定文字优先用 GPT 做的金属浮雕字图片（按高度缩放），没有就用字体画
+function label(ctx, key, t, x, y, h, align = 'center') {
+    const im = IMG[key]; if (!im) { text(ctx, t, x, y, Math.round(h * 0.8), GOLD_HI, align); return; }
+    const w = im.width * h / im.height; const lx = align === 'left' ? x : align === 'right' ? x - w : x - w / 2; ctx.drawImage(im, lx, y - h / 2, w, h);
+}
+const portrait = (j) => IMG[j.img + '2'] || IMG[j.img];
+const LABEL = { 0: 'txt_warrior', 1: 'txt_mage', 2: 'txt_spirit' };
 const NA = ['晨', '雾', '青', '岚', '沐', '霜', '尘', '星', '墨', '骁', '临', '寒', '炎', '风', '远', '归', '凌', '昭', '野', '川'];
 const NB = ['风', '影', '歌', '岳', '行', '刃', '舟', '辰', '夜', '羽', '生', '白', '霆', '石', '漠', '溪', '烽', '弦', '原', '锋'];
 const randName = () => NA[Math.floor(Math.random() * NA.length)] + NB[Math.floor(Math.random() * NB.length)] + (Math.random() < 0.5 ? NB[Math.floor(Math.random() * NB.length)] : '');
 
 function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
-function text(ctx, t, x, y, size, color = GOLD_HI, align = 'center', bold = true) { ctx.font = `${bold ? 'bold ' : ''}${size}px "Microsoft YaHei",sans-serif`; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(t, x, y); ctx.fillStyle = color; ctx.fillText(t, x, y); }
+// 文字：思源宋体粗体；金色字用上亮下暗的渐变 + 深色描边 + 柔光，其余颜色只描边
+function text(ctx, t, x, y, size, color = GOLD_HI, align = 'center', bold = true) {
+    ctx.save(); ctx.font = `${size}px "DDSerif","Microsoft YaHei",serif`; ctx.textAlign = align; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(3, size * 0.2); ctx.strokeStyle = 'rgba(12,6,2,.9)'; ctx.strokeText(t, x, y);
+    if (color === GOLD_HI && bold) { const g = ctx.createLinearGradient(0, y - size / 2, 0, y + size / 2); g.addColorStop(0, '#fff6d8'); g.addColorStop(0.45, '#f2c75a'); g.addColorStop(1, '#a8661a'); ctx.fillStyle = g; ctx.shadowColor = 'rgba(255,190,80,.45)'; ctx.shadowBlur = size * 0.5; }
+    else ctx.fillStyle = color;
+    ctx.fillText(t, x, y); ctx.restore();
+}
 // 画图：填满矩形（cover）或放进矩形（contain）
 function draw(ctx, k, x, y, w, h, mode = 'stretch') {
     const im = IMG[k]; if (!im) return false;
@@ -126,8 +142,8 @@ export class DdEntryScene extends Scene {
     }
 
     _select(ctx, add) {
-        if (!draw(ctx, 'ui_sel_bg', 0, 0, W, H, 'cover')) draw(ctx, 'bg_title', 0, 0, W, H, 'cover');
-        ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(0, 0, W, H);
+        if (!draw(ctx, 'ui_sel_bg2', 0, 0, W, H, 'cover') && !draw(ctx, 'ui_sel_bg', 0, 0, W, H, 'cover')) draw(ctx, 'bg_title', 0, 0, W, H, 'cover');
+        ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(0, 0, W, H);
         const now = Date.now();
         // —— 右：展台 + 当前角色（选中的角色，或正在创建的职业）
         const sx = W / 2 - 40; const sw = W - sx - 60; const sy = 22; const sh = 382;
@@ -136,13 +152,13 @@ export class DdEntryScene extends Scene {
         if (cur) {
             const J = JOBS[cur.job] || JOBS[0]; const glow = 0.55 + 0.15 * Math.sin(now / 600);
             const g = ctx.createRadialGradient(sx + sw / 2, sy + sh - 70, 10, sx + sw / 2, sy + sh - 70, 170); g.addColorStop(0, `rgba(140,180,255,${glow * 0.45})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(sx, sy, sw, sh);
-            const im = IMG[J.img]; if (im) { const bh = sh - 70 + Math.sin(now / 700) * 2; const bw = im.width * bh / im.height; ctx.drawImage(im, sx + sw / 2 - bw / 2, sy + sh - 30 - bh, bw, bh); }
+            const im = portrait(J); if (im) { const bh = sh - 70 + Math.sin(now / 700) * 2; const bw = im.width * bh / im.height; ctx.drawImage(im, sx + sw / 2 - bw / 2, sy + sh - 30 - bh, bw, bh); }
             text(ctx, cur.name, sx + sw / 2, sy + 30, 20);
             text(ctx, J.name + (this.creating ? '' : '  ' + (cur.level || 1) + '级'), sx + sw / 2, sy + 56, 14, '#e8dcc0');
         } else text(ctx, '还没有角色，点「创建角色」', sx + sw / 2, sy + sh / 2, 16, '#e8dcc0');
         // —— 左：新建角色面板
         if (this.creating) this._createPanel(ctx, add, 60, 22, W / 2 - 140, 382);
-        else { text(ctx, '选择角色', 60 + (W / 2 - 140) / 2, 210, 26); text(ctx, '点下面的角色栏切换，按「开始游戏」进入', 60 + (W / 2 - 140) / 2, 248, 13, '#e8dcc0', 'center', false); }
+        else { label(ctx, 'txt_selchar', '选择角色', 60 + (W / 2 - 140) / 2, 200, 56); text(ctx, '点下面的角色栏切换，按「开始游戏」进入', 60 + (W / 2 - 140) / 2, 252, 14, '#e8dcc0', 'center', false); }
         // —— 下：两个角色栏 + 中间按钮
         const by = 418; const slw = 330; const slh = 150;
         for (let i = 0; i < 2; i++) {
@@ -165,32 +181,32 @@ export class DdEntryScene extends Scene {
     _createPanel(ctx, add, x, y, w, h) {
         if (!draw(ctx, 'ui_panel_stone', x, y, w, h, 'stretch')) panelFallback(ctx, x, y, w, h);
         const cx = x + w / 2;
-        text(ctx, '新建角色', cx, y + 40, 24);
+        label(ctx, 'txt_newchar', '新建角色', cx, y + 40, 40);
         // 名字
-        text(ctx, '名字', cx, y + 82, 15, '#d8c8a0', 'center', false);
+        label(ctx, 'txt_name', '名字', cx, y + 80, 24);
         const nw = 230; rr(ctx, cx - nw / 2 - 40, y + 98, nw, 38, 5); ctx.fillStyle = 'rgba(8,6,4,.85)'; ctx.fill(); ctx.strokeStyle = GOLD; ctx.lineWidth = 1.2; ctx.stroke();
         text(ctx, this.name, cx - 40, y + 117, 18, '#fff2d0'); add('name', cx - nw / 2 - 40, y + 98, nw, 38);
         this._btn(ctx, add, 'rand', 'btn_random', '随机', cx + nw / 2 - 30, y + 94, 100, 46);
         // 职业
-        text(ctx, '职业', cx, y + 162, 15, '#d8c8a0', 'center', false);
-        const isz = 70; JOBS.forEach((j, i) => {
-            const ix = cx - (3 * isz + 2 * 16) / 2 + i * (isz + 16); const iy = y + 178; const on = this.job === j.id;
+        label(ctx, 'txt_job', '职业', cx, y + 160, 24);
+        const isz = 60; JOBS.forEach((j, i) => {
+            const ix = cx - (3 * isz + 2 * 16) / 2 + i * (isz + 16); const iy = y + 176; const on = this.job === j.id;
             if (on) { ctx.save(); ctx.shadowColor = '#ffd86a'; ctx.shadowBlur = 18; rr(ctx, ix - 3, iy - 3, isz + 6, isz + 6, 8); ctx.strokeStyle = GOLD_HI; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); }
             ctx.globalAlpha = on ? 1 : 0.65;
             if (!draw(ctx, j.icon, ix, iy, isz, isz, 'contain')) { panelFallback(ctx, ix, iy, isz, isz); text(ctx, j.name[0], ix + isz / 2, iy + isz / 2, 26); }
-            ctx.globalAlpha = 1; text(ctx, j.name, ix + isz / 2, iy + isz + 14, 14, on ? GOLD_HI : '#d8c8a0');
+            ctx.globalAlpha = on ? 1 : 0.7; label(ctx, LABEL[j.id], j.name, ix + isz / 2, iy + isz + 15, 22); ctx.globalAlpha = 1;
             add('job:' + j.id, ix, iy, isz, isz + 24);
         });
-        text(ctx, JOBS[this.job].desc, cx, y + 290, 13, '#e8dcc0', 'center', false);
+        text(ctx, JOBS[this.job].desc, cx, y + 270, 13, '#e8dcc0', 'center', false);
         // 性别
-        const gsz = 50; [['ui_icon_male', '男', 0], ['ui_icon_female', '女', 1]].forEach(([k, l, v], i) => {
-            const gx = cx - gsz - 40 + i * (gsz + 80); const gy = y + 300; const on = this.sex === v;
+        const gsz = 40; [['ui_icon_male', '男', 0], ['ui_icon_female', '女', 1]].forEach(([k, l, v], i) => {
+            const gx = cx - gsz - 40 + i * (gsz + 80); const gy = y + 286; const on = this.sex === v;
             ctx.globalAlpha = on ? 1 : 0.55; if (!draw(ctx, k, gx, gy, gsz, gsz, 'contain')) { panelFallback(ctx, gx, gy, gsz, gsz); text(ctx, l, gx + gsz / 2, gy + gsz / 2, 20); } ctx.globalAlpha = 1;
             if (on) { rr(ctx, gx - 2, gy - 2, gsz + 4, gsz + 4, 6); ctx.strokeStyle = GOLD_HI; ctx.lineWidth = 2; ctx.stroke(); }
             text(ctx, l, gx + gsz + 16, gy + gsz / 2, 15, on ? GOLD_HI : '#d8c8a0');
             add('sex:' + v, gx, gy, gsz + 30, gsz);
         });
-        this._btn(ctx, add, 'submit', 'btn_submit', this.busy ? '创建中' : '提交', cx - 70, y + h - 58, 140, 48);
+        this._btn(ctx, add, 'submit', 'btn_submit', this.busy ? '创建中' : '提交', cx - 64, y + h - 52, 128, 42);
         if (this.chars.length) this._btn(ctx, add, 'cancel', 'btn_back', '返回', x + 16, y + h - 56, 100, 44);
     }
 }

@@ -20,7 +20,7 @@ function bar(ctx, x, y, w, h, k, c1, c2, text) {
     rr(ctx, x, y, w, h, h / 2); ctx.fillStyle = '#0c0a08'; ctx.fill();
     if (k > 0) { const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, c1); g.addColorStop(1, c2); rr(ctx, x + 1, y + 1, Math.max(h, (w - 2) * Math.min(1, k)), h - 2, (h - 2) / 2); ctx.fillStyle = g; ctx.fill(); }
     rr(ctx, x, y, w, h, h / 2); ctx.strokeStyle = 'rgba(200,162,74,.7)'; ctx.lineWidth = 1; ctx.stroke();
-    if (text) { ctx.font = 'bold 11px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(text, x + w / 2, y + h / 2 + 0.5); ctx.fillStyle = '#fff'; ctx.fillText(text, x + w / 2, y + h / 2 + 0.5); }
+    if (text) { ctx.font = 'bold 11px "DDSerif","Microsoft YaHei",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(text, x + w / 2, y + h / 2 + 0.5); ctx.fillStyle = '#fff'; ctx.fillText(text, x + w / 2, y + h / 2 + 0.5); }
 }
 function roundBtn(ctx, x, y, r, label, opt = {}) {
     const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
@@ -28,10 +28,15 @@ function roundBtn(ctx, x, y, r, label, opt = {}) {
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = g; ctx.globalAlpha = opt.alpha ?? 0.92; ctx.fill(); ctx.globalAlpha = 1;
     ctx.lineWidth = 3; ctx.strokeStyle = IRON; ctx.stroke();
     ctx.beginPath(); ctx.arc(x, y, r - 3, 0, Math.PI * 2); ctx.lineWidth = 1.5; ctx.strokeStyle = opt.pressed ? GOLD_HI : GOLD; ctx.stroke();
-    if (label) { ctx.font = `bold ${opt.size || 14}px "Microsoft YaHei",sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(label, x, y + 1); ctx.fillStyle = opt.color || GOLD_HI; ctx.fillText(label, x, y + 1); }
+    if (label) { ctx.font = `bold ${opt.size || 14}px "DDSerif","Microsoft YaHei",serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(label, x, y + 1); ctx.fillStyle = opt.color || GOLD_HI; ctx.fillText(label, x, y + 1); }
 }
 
 // 界面贴图（GPT 原创）：frontend/assets/ui/*.png，缺图时用代码画的兜底
+// 按需加载的界面图（GPT 原创）：没到之前返回 null，画面用代码兜底
+const LAZY = {};
+function ui(k) { if (!(k in LAZY)) { LAZY[k] = null; const im = new Image(); im.onload = () => { LAZY[k] = im; }; im.src = 'assets/ui/' + k + '.png'; } return LAZY[k]; }
+function pic(ctx, k, x, y, w, h) { const im = ui(k); if (!im) return false; ctx.drawImage(im, x, y, w, h); return true; }
+const BTN_ART = { attack: 'hud_btn_attack', bag: 'hud_btn_bag', role: 'hud_btn_role', lock: 'hud_btn_lock', pickup: 'hud_btn_pick' };
 const UI = {};
 for (const k of ['hud_orb_frame', 'hud_orb_red', 'hud_orb_blue', 'hud_panel', 'hud_btn']) {
     const im = new Image(); im.onload = () => { UI[k] = im; }; im.src = 'assets/ui/' + k + '.png';
@@ -205,13 +210,13 @@ export class MobileHud {
         const R = this._pickerRect();
         ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, 0, W, H);
         frame(ctx, R.x, R.y, R.w, R.h, 10);
-        ctx.font = 'bold 15px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = GOLD_HI;
+        ctx.font = 'bold 15px "DDSerif","Microsoft YaHei",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = GOLD_HI;
         ctx.fillText('设置技能键 ' + this.picker.key + '（点选要放上去的技能）', R.x + R.w / 2, R.y + 24);
-        if (!R.list.length) { ctx.font = '13px "Microsoft YaHei",sans-serif'; ctx.fillStyle = '#c8c0b0'; ctx.fillText('还没有学会主动技能，打怪掉技能书学习', R.x + R.w / 2, R.y + 70); return; }
+        if (!R.list.length) { ctx.font = '13px "DDSerif","Microsoft YaHei",serif'; ctx.fillStyle = '#c8c0b0'; ctx.fillText('还没有学会主动技能，打怪掉技能书学习', R.x + R.w / 2, R.y + 70); return; }
         R.list.forEach(({ sk }, i) => {
             const y = R.y + 50 + i * 40; rr(ctx, R.x + 14, y, R.w - 28, 34, 5); ctx.fillStyle = sk.key === this.picker.key ? 'rgba(200,162,74,.35)' : 'rgba(255,255,255,.06)'; ctx.fill();
-            ctx.textAlign = 'left'; ctx.font = 'bold 14px "Microsoft YaHei",sans-serif'; ctx.fillStyle = '#f0e2c0'; ctx.fillText(sk.name || '技能', R.x + 28, y + 17);
-            ctx.textAlign = 'right'; ctx.font = '12px "Microsoft YaHei",sans-serif'; ctx.fillStyle = '#c8c0b0'; ctx.fillText((sk.level || 0) + '级' + (sk.key ? '  当前在键 ' + sk.key : ''), R.x + R.w - 28, y + 17);
+            ctx.textAlign = 'left'; ctx.font = 'bold 14px "DDSerif","Microsoft YaHei",serif'; ctx.fillStyle = '#f0e2c0'; ctx.fillText(sk.name || '技能', R.x + 28, y + 17);
+            ctx.textAlign = 'right'; ctx.font = '12px "DDSerif","Microsoft YaHei",serif'; ctx.fillStyle = '#c8c0b0'; ctx.fillText((sk.level || 0) + '级' + (sk.key ? '  当前在键 ' + sk.key : ''), R.x + R.w - 28, y + 17);
         });
     }
 
@@ -286,11 +291,11 @@ export class MobileHud {
         this.tick(now);
         ctx.save();
         // —— 左上：角色名 + 任务追踪
-        frame(ctx, 8, 8, 232, 96, 6);
-        ctx.font = 'bold 13px "Microsoft YaHei",sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillStyle = '#f0e2c0'; ctx.fillText(p.name || '', 18, 24);
+        if (!pic(ctx, 'hud_frame_panel', 4, 4, 240, 104)) frame(ctx, 8, 8, 232, 96, 6);
+        ctx.font = 'bold 13px "DDSerif","Microsoft YaHei",serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillStyle = '#f0e2c0'; ctx.fillText(p.name || '', 18, 24);
         ctx.fillStyle = GOLD_HI; ctx.textAlign = 'right'; ctx.fillText((['武者', '术士', '灵师'][p.job || 0] || '') + ' ' + (p.level || 1) + '级', 230, 24);
         ctx.fillStyle = 'rgba(200,162,74,.5)'; ctx.fillRect(16, 36, 216, 1);
-        ctx.textAlign = 'left'; ctx.font = '12px "Microsoft YaHei",sans-serif';
+        ctx.textAlign = 'left'; ctx.font = '12px "DDSerif","Microsoft YaHei",serif';
         const tips = this._questLines(p);
         tips.forEach((t, i) => { ctx.fillStyle = t[1]; ctx.fillText(t[0], 18, 52 + i * 17); });
         // —— 右上：小地图（地图名在上，坐标在下）
@@ -306,11 +311,13 @@ export class MobileHud {
         this._chat(ctx);
         // —— 摇杆
         const st = this.stick; const bx = st ? st.ox : 150; const by = st ? st.oy : H - 175;
-        ctx.globalAlpha = st ? 0.9 : 0.6;
-        ctx.beginPath(); ctx.arc(bx, by, STICK_R, 0, Math.PI * 2); ctx.fillStyle = 'rgba(20,16,12,.5)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = IRON; ctx.stroke();
-        ctx.beginPath(); ctx.arc(bx, by, STICK_R - 4, 0, Math.PI * 2); ctx.lineWidth = 1.5; ctx.strokeStyle = GOLD; ctx.stroke();
+        ctx.globalAlpha = st ? 0.95 : 0.7;
+        if (!pic(ctx, 'hud_joy_base', bx - STICK_R - 8, by - STICK_R - 8, (STICK_R + 8) * 2, (STICK_R + 8) * 2)) {
+            ctx.beginPath(); ctx.arc(bx, by, STICK_R, 0, Math.PI * 2); ctx.fillStyle = 'rgba(20,16,12,.5)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = IRON; ctx.stroke();
+            ctx.beginPath(); ctx.arc(bx, by, STICK_R - 4, 0, Math.PI * 2); ctx.lineWidth = 1.5; ctx.strokeStyle = GOLD; ctx.stroke();
+        }
         let kx = bx, ky = by; if (st) { const dx = st.x - st.ox; const dy = st.y - st.oy; const d = Math.hypot(dx, dy) || 1; const m = Math.min(d, STICK_R); kx = bx + dx / d * m; ky = by + dy / d * m; }
-        roundBtn(ctx, kx, ky, 28, '', { hi: '#7a6450', lo: '#2a2018' });
+        if (!pic(ctx, 'hud_joy_knob', kx - 32, ky - 32, 64, 64)) roundBtn(ctx, kx, ky, 28, '', { hi: '#7a6450', lo: '#2a2018' });
         ctx.globalAlpha = 1;
         // —— 按钮（技能键显示所放技能的名字，没放的显示编号，长按可设置）
         this._autoBind();
@@ -318,10 +325,21 @@ export class MobileHud {
         for (const b of this.buttons) {
             const pressed = [...this.pressed.values()].includes(b.id);
             let alpha = 0.92;
-            if (b.id.startsWith('sk')) { const bd = bound[Number(b.id.slice(2))]; b.label = bd ? (bd.sk.name || '技能').slice(0, 4) : String(b.id.slice(2)); b.size = bd ? 11 : 14; if (!bd) alpha = 0.45; }
-            if (b.id === 'pickup' && !s.groundItems.size) alpha = 0.4;
+            let art = BTN_ART[b.id]; let icon = null;
+            if (b.id.startsWith('sk')) { const bd = bound[Number(b.id.slice(2))]; b.label = bd ? (bd.sk.name || '技能').slice(0, 4) : String(b.id.slice(2)); b.size = bd ? 11 : 14; if (!bd) alpha = 0.45; icon = bd ? 'sk_' + bd.mid : null; art = 'hud_btn_round'; }
+            if (b.id === 'mode' || b.id === 'rank') art = 'hud_btn_round';
+            if (b.id === 'pickup' && !s.groundItems.size) alpha = 0.5;
             if (b.id === 'lock' && s.chaseTargetId != null) alpha = 1;
-            roundBtn(ctx, b.x, b.y, b.r * (pressed ? 0.94 : 1), b.label, { size: b.size, color: b.color, alpha, pressed });
+            const rr2 = b.r * (pressed ? 0.94 : 1);
+            // 技能键：图标铺满圆里，外面套金属圈；其他按钮整张图（图里已带字的不再写字）
+            if (icon && ui(icon)) {
+                ctx.globalAlpha = alpha; ctx.save(); ctx.beginPath(); ctx.arc(b.x, b.y, rr2 * 0.98, 0, Math.PI * 2); ctx.clip(); pic(ctx, icon, b.x - rr2 * 1.02, b.y - rr2 * 1.02, rr2 * 2.04, rr2 * 2.04); ctx.restore(); ctx.globalAlpha = 1;
+                const sname = b.label; ctx.font = 'bold 10px "DDSerif","Microsoft YaHei",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(sname, b.x, b.y + rr2 + 8); ctx.fillStyle = GOLD_HI; ctx.fillText(sname, b.x, b.y + rr2 + 8);
+            } else if (art && ui(art)) {
+                ctx.globalAlpha = alpha; pic(ctx, art, b.x - rr2 * 1.12, b.y - rr2 * 1.12, rr2 * 2.24, rr2 * 2.24); ctx.globalAlpha = 1;
+                if (art === 'hud_btn_round') { ctx.font = `bold ${b.size || 13}px "DDSerif","Microsoft YaHei",serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(b.label, b.x, b.y + 1); ctx.fillStyle = b.color || GOLD_HI; ctx.fillText(b.label, b.x, b.y + 1); }
+            } else roundBtn(ctx, b.x, b.y, rr2, b.label, { size: b.size, color: b.color, alpha, pressed });
+            if (pressed) { ctx.beginPath(); ctx.arc(b.x, b.y, rr2 + 2, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,230,160,.8)'; ctx.stroke(); }
         }
         if (this.skDown && Date.now() - this.skDown.at > 250) { const b = this.buttons.find((q) => q.id === this.skDown.id); const k = Math.min(1, (Date.now() - this.skDown.at) / 450); ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.lineWidth = 3; ctx.strokeStyle = GOLD_HI; ctx.stroke(); }
         if (this.picker) this._renderPicker(ctx);
@@ -338,10 +356,12 @@ export class MobileHud {
 
     _statusBar(ctx, p, now) {
         const y = H - 22;
-        const g = ctx.createLinearGradient(0, y, 0, H); g.addColorStop(0, 'rgba(24,18,12,.95)'); g.addColorStop(1, 'rgba(8,6,4,.98)');
-        ctx.fillStyle = g; ctx.fillRect(0, y, W, 22); ctx.fillStyle = GOLD; ctx.fillRect(0, y, W, 1);
+        if (!pic(ctx, 'hud_statusbar', -6, y - 4, W + 12, 28)) {
+            const g = ctx.createLinearGradient(0, y, 0, H); g.addColorStop(0, 'rgba(24,18,12,.95)'); g.addColorStop(1, 'rgba(8,6,4,.98)');
+            ctx.fillStyle = g; ctx.fillRect(0, y, W, 22); ctx.fillStyle = GOLD; ctx.fillRect(0, y, W, 1);
+        }
         const d = new Date(now); const hh = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-        ctx.font = '12px "Microsoft YaHei",sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillStyle = '#e8dcc0';
+        ctx.font = '12px "DDSerif","Microsoft YaHei",serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillStyle = '#e8dcc0';
         ctx.fillText(hh, 14, y + 11); ctx.fillText((p.level || 1) + '级', 80, y + 11);
         const ex = (p.exp || 0) / (p.maxExp || 1e9);
         ctx.fillText('经验', 140, y + 11); bar(ctx, 172, y + 6, 220, 10, ex, '#ffd86a', '#a8741a'); ctx.fillStyle = '#ffe27a'; ctx.fillText((ex * 100).toFixed(1) + '%', 400, y + 11);
@@ -355,14 +375,15 @@ export class MobileHud {
         const n = 6; const sw = 52; const sh = 46; const gap = 4; const x0 = 456; const y0 = H - 22 - 72 - sh - 6;
         this.slots = [];
         for (let i = 0; i < n; i++) {
-            const x = x0 + i * (sw + gap); rr(ctx, x, y0, sw, sh, 4); ctx.fillStyle = 'rgba(10,8,6,.62)'; ctx.fill(); ctx.strokeStyle = 'rgba(200,162,74,.75)'; ctx.lineWidth = 1; ctx.stroke();
+            const x = x0 + i * (sw + gap);
+            if (!pic(ctx, 'hud_slot', x - 2, y0 - 2, sw + 4, sh + 4)) { rr(ctx, x, y0, sw, sh, 4); ctx.fillStyle = 'rgba(10,8,6,.62)'; ctx.fill(); ctx.strokeStyle = 'rgba(200,162,74,.75)'; ctx.lineWidth = 1; ctx.stroke(); }
             const mi = (p.quickSlots || [])[i] || 0; const it = mi > 0 ? this._bagItem(mi) : null;
-            ctx.font = '12px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = '12px "DDSerif","Microsoft YaHei",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             if (it) {
                 const tex = it.looks != null ? this._itemTex(it.looks) : null;
                 if (tex) ctx.drawImage(tex.canvas, x + sw / 2 - 19, y0 + 2, 38, 38);
                 else { ctx.fillStyle = /魔法/.test(it.name || '') ? '#8ab0ff' : '#ff8a7a'; ctx.fillText((it.name || '药').replace(/\(.*\)/, '').slice(0, 3), x + sw / 2, y0 + sh / 2 - 4); }
-                ctx.font = 'bold 11px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'right'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; const n = String(this._count(it.name)); ctx.strokeText(n, x + sw - 3, y0 + sh - 7); ctx.fillStyle = '#fff'; ctx.fillText(n, x + sw - 3, y0 + sh - 7);
+                ctx.font = 'bold 11px "DDSerif","Microsoft YaHei",serif'; ctx.textAlign = 'right'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; const n = String(this._count(it.name)); ctx.strokeText(n, x + sw - 3, y0 + sh - 7); ctx.fillStyle = '#fff'; ctx.fillText(n, x + sw - 3, y0 + sh - 7);
             }
             else { ctx.fillStyle = 'rgba(200,180,140,.35)'; ctx.fillText(String(i + 1), x + sw / 2, y0 + sh / 2); }
             this.slots.push({ x, y: y0, w: sw, h: sh, i });
@@ -378,14 +399,14 @@ export class MobileHud {
 
     _chat(ctx) {
         const s = this.scene; const x = 456; const w = 330; const h = 70; const y = H - 22 - h - 2;
-        rr(ctx, x, y, w, h, 4); ctx.fillStyle = 'rgba(8,6,4,.62)'; ctx.fill(); ctx.strokeStyle = 'rgba(200,162,74,.5)'; ctx.lineWidth = 1; ctx.stroke();
+        if (!pic(ctx, 'hud_frame_chat', x - 4, y - 4, w + 8, h + 8)) { rr(ctx, x, y, w, h, 4); ctx.fillStyle = 'rgba(8,6,4,.62)'; ctx.fill(); ctx.strokeStyle = 'rgba(200,162,74,.5)'; ctx.lineWidth = 1; ctx.stroke(); }
         const lines = (s.chatLines || []).slice(-4);
-        ctx.font = '12px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.font = '12px "DDSerif","Microsoft YaHei",serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
         lines.forEach((ln, i) => {
             const t = typeof ln === 'string' ? ln : ln.text || '';
             ctx.fillStyle = 'rgba(200,162,74,.85)'; rr(ctx, x + 6, y + 8 + i * 16, 30, 13, 3); ctx.fill();
-            ctx.fillStyle = '#1a1208'; ctx.font = '10px "Microsoft YaHei",sans-serif'; ctx.fillText('系统', x + 10, y + 15 + i * 16);
-            ctx.font = '12px "Microsoft YaHei",sans-serif'; ctx.fillStyle = (ln && ln.fg && ln.fg !== '#008000') ? ln.fg : '#9be29b'; ctx.fillText(t.slice(0, 22), x + 42, y + 15 + i * 16);
+            ctx.fillStyle = '#1a1208'; ctx.font = '10px "DDSerif","Microsoft YaHei",serif'; ctx.fillText('系统', x + 10, y + 15 + i * 16);
+            ctx.font = '12px "DDSerif","Microsoft YaHei",serif'; ctx.fillStyle = (ln && ln.fg && ln.fg !== '#008000') ? ln.fg : '#9be29b'; ctx.fillText(t.slice(0, 22), x + 42, y + 15 + i * 16);
         });
     }
 
@@ -396,11 +417,12 @@ export class MobileHud {
         if (this._mmId !== id) { this._mmId = id; this._mmImg = null; const im = new Image(); im.onload = () => { if (this._mmId === id) this._mmImg = im; }; im.src = '/resources/Data/minimap_' + id + '.jpg'; }
         const p = s.self; const CW = 6; const CH = 4; const hh = 20;
         // 外框
-        rr(ctx, x - 3, y - 3, w + 6, h + hh * 2 + 6, 8); ctx.fillStyle = '#16110b'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = IRON; ctx.stroke();
-        rr(ctx, x - 1, y - 1, w + 2, h + hh * 2 + 2, 7); ctx.lineWidth = 1.5; ctx.strokeStyle = GOLD; ctx.stroke();
+        const mmArt = !!ui('hud_frame_minimap');
+        if (!mmArt) { rr(ctx, x - 3, y - 3, w + 6, h + hh * 2 + 6, 8); ctx.fillStyle = '#16110b'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = IRON; ctx.stroke(); rr(ctx, x - 1, y - 1, w + 2, h + hh * 2 + 2, 7); ctx.lineWidth = 1.5; ctx.strokeStyle = GOLD; ctx.stroke(); }
+        else { ctx.fillStyle = 'rgba(10,8,6,.85)'; ctx.fillRect(x, y + hh, w, h + hh); }
         // 地图名
         const name = (s.snapshot && s.snapshot.map && (s.snapshot.map.title || s.snapshot.map.name)) || '';
-        ctx.font = 'bold 13px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = GOLD_HI; ctx.fillText(name, x + w / 2, y + hh / 2 + 1);
+        ctx.font = 'bold 13px "DDSerif","Microsoft YaHei",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = GOLD_HI; ctx.fillText(name, x + w / 2, y + hh / 2 + 1);
         const my = y + hh;
         ctx.save(); rr(ctx, x + 2, my, w - 4, h, 4); ctx.clip();
         const vw = (w - 4) / CW; const vh = h / CH; // 能看到多少格
@@ -422,8 +444,10 @@ export class MobileHud {
         ctx.save(); ctx.translate(px, py); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -5); ctx.lineTo(-2, 0); ctx.lineTo(-5, 5); ctx.closePath();
         ctx.fillStyle = '#ffd84a'; ctx.fill(); ctx.lineWidth = 1.2; ctx.strokeStyle = '#3a2000'; ctx.stroke(); ctx.restore();
         ctx.restore();
+        // GPT 小地图框盖在最上面，再写地图名（框顶部有名牌）
+        if (mmArt) { pic(ctx, 'hud_frame_minimap', x - 10, y - 8, w + 20, h + hh * 2 + 16); ctx.font = 'bold 13px "DDSerif","Microsoft YaHei",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(name, x + w / 2, y + hh / 2 + 1); ctx.fillStyle = GOLD_HI; ctx.fillText(name, x + w / 2, y + hh / 2 + 1); }
         // 坐标
-        ctx.font = '12px "Microsoft YaHei",sans-serif'; ctx.fillStyle = '#e8dcc0'; ctx.textAlign = 'center';
+        ctx.font = '12px "DDSerif","Microsoft YaHei",serif'; ctx.fillStyle = '#e8dcc0'; ctx.textAlign = 'center';
         ctx.fillText(p.x + ' , ' + p.y, x + w / 2, my + h + hh / 2);
     }
 }

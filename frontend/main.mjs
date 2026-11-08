@@ -38,6 +38,8 @@ const guiEl = document.getElementById('gui');
 const winManager = new DWinManager(guiEl);
 
 async function init() {
+    // 先把界面字体加载好，避免先用系统字体画一帧再跳
+    try { await document.fonts.load('20px DDSerif', '打到天亮'); } catch (e) { /* 字体没加载到就用系统字体 */ }
     // 先加载资源索引（图片/地图/音频 URL）
     await loadResources();
 

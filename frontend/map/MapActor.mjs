@@ -216,7 +216,7 @@ export class MapActor {
 
                     // 名字（血条上方：格顶 - 71，与血条 -57 一起都在头顶上方）
                     if (e.name) {
-                        ctx.font = '11px SimSun,serif';
+                        ctx.font = '12px "DDSerif","Microsoft YaHei",serif';
                         ctx.textAlign = 'center';
                         const tw = ctx.measureText(e.name).width;
                         const nx = anchorX + TILE_W / 2;
