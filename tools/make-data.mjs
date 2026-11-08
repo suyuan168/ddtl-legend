@@ -25,10 +25,12 @@ gbk('Npcs.txt', ['; 名字 类型 地图 x y 朝向 外观', ...TOWN.filter((n) 
 // —— NPC 脚本（台词全部原创）。脚本里 \ 是换行；%100 = 按原价卖；+N = 收购这类物品（StdMode）
 const BR = ' \\';
 const wr = (dir, f, rows) => { const d = join(ENV, dir); mkdirSync(d, { recursive: true }); writeFileSync(join(d, f), iconv.encode(rows.join('\r\n') + '\r\n', 'gbk')); };
+const ITEMS = readFileSync(join(ROOT, 'gamedata/mud2/DB/StdItems.csv'), 'utf8').split(/\r?\n/); const IH = ITEMS[0].split(',');
+const PRICE = Object.fromEntries(ITEMS.slice(1).map((l) => l.split(',')).filter((c) => c[1]).map((c) => [c[IH.indexOf('Name')], Number(c[IH.indexOf('Price')])]));
 const shop = (intro, kinds, goods, what) => ['%100', ...kinds.map((k) => '+' + k), '[@main]', ...intro.map((l) => l + BR), BR,
   ` <买/@buy>${what}${BR}`, ` <卖/@sell>${what}${BR}`, ' <离开/@exit>',
   '[@buy]', '看看有什么合用的。' + BR + BR, ' <返回/@main>', '[@sell]', '把要卖的东西放上来，我给你估个价。' + BR + BR, ' <返回/@main>',
-  '[goods]', ...goods.map((g) => g + ' 100 100')];
+  '[goods]', ...goods.map((g) => g + ' ' + (PRICE[g] || 100) + ' 100')];   // 第二列 = 售价（JootM2 按这一列收钱），取物品表的价格
 wr('Market_Def', 'dd_weapon.txt', shop(['炉子一直烧着，新打的兵器还热乎。', '出城之前，先挑一把顺手的。'], [5, 6],
   ['练习木剑', '护身匕首', '乌木杖', '青铜短剑', '精铁长剑', '猎刀', '青铜斧', '八荒', '半月', '海魂'], '兵器'));
 wr('Market_Def', 'dd_armor.txt', shop(['衣甲、头盔、首饰都在这儿。', '晨雾林里的角兽皮厚，穿结实点再去。'], [10, 11, 15, 19, 20, 21, 22, 23, 24, 26],

@@ -103,6 +103,7 @@ const PASSIVE_MAGICS = new Set([3, 4, 7, 12]);
 // 每项 = 起始帧 + 连续帧数，动画帧间隔约 80ms（原版 NextFrameTime）。
 // 帧号对齐原版 EffectBase[Effect-1] 表：命中爆炸 = EffectBase + EXPLOSIONBASE(170)，
 // 飞行 = EffectBase + FLYBASE(10)，部分技能有特例（爆裂/冰咆哮/圣言）。
+const SHOP_ROWS = 8;   // 打到天亮：买列表每页行数（行高放大适配手机）
 const FX_FRAMES = {
     // 命中爆炸（EffectBase + 170）
     boomFire:     { lib: 'magic',  base: 170,  frames: 10, ft: 80 },   // 火球（Effect=1→0+170）
@@ -1148,6 +1149,7 @@ export class PlayScene extends Scene {
                 if (this.shopSellItem) {
                     const still = (msg.items || []).some(x => x.makeIndex === this.shopSellItem.makeIndex);
                     if (!still) this._clearSellSpot();
+                    this._renderSellBag();
                 }
                 break;
             case 'storage':
@@ -2240,30 +2242,21 @@ export class PlayScene extends Scene {
         this._npcDlgX = this.self.x;
         this._npcDlgY = this.self.y;
         const gui = this.manager.winManager.container;
+        // 打到天亮：版式和逻辑照原版商人对话框，只换成我们的美术（GPT 底图 ui_dlg_npc），字体放大适配手机
+        const DW = 600; const DH = 230;
         const dlg = document.createElement('div');
-        dlg.style.cssText = 'position:absolute;left:0;top:0;width:416px;height:176px;pointer-events:auto;';
+        dlg.className = 'dwin';   // 触屏 HUD 不抢这个窗口里的点击
+        dlg.style.cssText = 'position:absolute;left:' + Math.round((SCREEN_WIDTH - DW) / 2) + 'px;top:24px;width:' + DW + 'px;height:' + DH + 'px;pointer-events:auto;';
         this.npcDlg = dlg;
         this._makeWindowDraggable(dlg);
         gui.appendChild(dlg);
+        dlg.appendChild(this._ddFrame('ui_dlg_npc'));
 
-        // 背景 Prguse[384]（商人对话框 416×176，异步插入不阻塞文本）
-        // 注意：不能用 z-index:-1，会被 #screen canvas 遮挡；背景图先插入、内容后追加即可盖在其上
-        this._prgUrl(384).then((bgUrl) => {
-            if (bgUrl && this.npcDlg === dlg) {
-                const bg = document.createElement('img');
-                bg.src = bgUrl;
-                bg.draggable = false;
-                bg.style.cssText = 'position:absolute;left:0;top:0;';
-                dlg.insertBefore(bg, dlg.firstChild);
-            }
-        });
-
-        // NPC 说话文本（白描边，从 30,20 开始；原版 lx=30 ly=20，字体 9号≈12px、行高 16px）
-        // 不设 overflow:hidden：原版 canvas 逐行绘制不裁剪，长文本（如公约多页）末行「下一页」会溢出对话框仍可见可点
+        // NPC 说话文本：长文本不裁剪（和原版一样，末行链接溢出也能点）
         const text = document.createElement('div');
-        text.style.cssText = 'position:absolute;left:30px;top:20px;width:340px;'
-            + 'font-family:SimSun,serif;font-size:12px;color:#ffffff;line-height:16px;'
-            + 'text-shadow:1px 1px 0 #000;white-space:pre-wrap;';
+        text.style.cssText = 'position:absolute;left:46px;top:34px;width:' + (DW - 92) + 'px;'
+            + 'font-family:"DDSerif","Microsoft YaHei",serif;font-size:15px;color:#efe3c4;line-height:23px;'
+            + 'text-shadow:1px 1px 0 #000,0 0 3px #000;white-space:pre-wrap;';
         // 说话文本：解析 <label@value> 为内联黄色链接（原版 DMerchantDlgDirectPaint 语义）
         this._renderNpcSay(text, msg.text || '', msg.npcId);
         dlg.appendChild(text);
@@ -2273,25 +2266,37 @@ export class PlayScene extends Scene {
             this._showShopPanel(msg);
         }
 
-        // 关闭按钮 Prguse[64]（399,1）：正常态红X画在背景图 384 里；透明热区接收点击，
-        // img（按下态）按下才显示、抬起恢复（原版 DccCloseDirectPaint 的 Downed 语义）
-        const close = document.createElement('div');
-        close.style.cssText = 'position:absolute;left:399px;top:1px;width:16px;height:23px;cursor:pointer;';
-        close.addEventListener('click', () => this.conn.send('npcSelect', { npcId: msg.npcId, value: 'exit' }));
-        dlg.appendChild(close);
-        this._prgUrl(64).then((closeUrl) => {
-            if (closeUrl && this.npcDlg === dlg) {
-                const img = document.createElement('img');
-                img.src = closeUrl;
-                img.draggable = false;
-                img.style.cssText = 'visibility:hidden;display:block;';
-                close.appendChild(img);
-                close.addEventListener('mousedown', () => { img.style.visibility = 'visible'; });
-                const restore = () => { img.style.visibility = 'hidden'; };
-                close.addEventListener('mouseup', restore);
-                close.addEventListener('mouseleave', restore);
-            }
-        });
+        // 关闭按钮（右上角）
+        dlg.appendChild(this._ddClose(DW - 50, 10, () => this.conn.send('npcSelect', { npcId: msg.npcId, value: 'exit' })));
+    }
+
+    // —— 打到天亮窗口美术：底图铺满窗口
+    _ddFrame(name) {
+        const bg = document.createElement('img');
+        bg.src = 'assets/ui/' + name + '.png'; bg.draggable = false;
+        bg.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;';
+        return bg;
+    }
+    _ddClose(x, y, cb) {
+        const b = document.createElement('div');
+        b.style.cssText = 'position:absolute;left:' + x + 'px;top:' + y + 'px;width:40px;height:40px;cursor:pointer;'
+            + 'background:url(assets/ui/ui_btn_close.png) center/contain no-repeat;';
+        b.addEventListener('click', cb);
+        b.addEventListener('pointerdown', () => { b.style.transform = 'scale(.92)'; });
+        b.addEventListener('pointerup', () => { b.style.transform = ''; });
+        return b;
+    }
+    _ddButton(label, x, y, w, h, cb) {
+        const b = document.createElement('div');
+        b.textContent = label;
+        b.style.cssText = 'position:absolute;left:' + x + 'px;top:' + y + 'px;width:' + w + 'px;height:' + h + 'px;line-height:' + h + 'px;text-align:center;cursor:pointer;'
+            + 'background:url(assets/ui/ui_btn_plate.png) center/100% 100% no-repeat;'
+            + 'font-family:"DDSerif","Microsoft YaHei",serif;font-size:15px;font-weight:bold;color:#ffe6a6;text-shadow:1px 1px 0 #000,0 0 3px #000;';
+        b.addEventListener('click', cb);
+        b.addEventListener('pointerdown', () => { b.style.transform = 'scale(.95)'; b.style.filter = 'brightness(1.25)'; });
+        const up = () => { b.style.transform = ''; b.style.filter = ''; };
+        b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up);
+        return b;
     }
 
     // 买卖界面（原版：buy=DMenuDlg 物品列表+翻页+买入；sell=DSellDlg ok 框投放）
@@ -2310,56 +2315,31 @@ export class PlayScene extends Scene {
         this.shopPage = 0;      // 列表起始行
         this.shopSel = -1;      // 选中商品全局索引
         const gui = this.manager.winManager.container;
+        // 打到天亮：照原版（物品列表 + 上下翻页 + 买入 + 关闭），换 GPT 底图 ui_dlg_list，放在对话框下方
+        const LW = 360; const LH = 330; const dl = this.npcDlg ? this.npcDlg.offsetLeft : Math.round((SCREEN_WIDTH - 600) / 2);
         const panel = document.createElement('div');
-        panel.style.cssText = 'position:absolute;left:0;top:176px;width:308px;height:205px;'
-            + 'pointer-events:auto;font-family:SimSun,serif;color:#e8d9b0;';
+        panel.className = 'dwin';
+        panel.style.cssText = 'position:absolute;left:' + dl + 'px;top:258px;width:' + LW + 'px;height:' + LH + 'px;'
+            + 'pointer-events:auto;font-family:"DDSerif","Microsoft YaHei",serif;color:#efe3c4;';
         this.shopPanel = panel;
         this._makeWindowDraggable(panel);
-        this._libUrl('prguse', 385).then((url) => {
-            if (url && this.shopPanel === panel) {
-                const bg = document.createElement('img');
-                bg.src = url; bg.draggable = false;
-                bg.style.cssText = 'position:absolute;left:0;top:0;';
-                panel.insertBefore(bg, panel.firstChild);
-            }
-        });
-        // 标题「物品列表」(19,9) /「价格」(156,9)——原版 DMenuDlgDirectPaint 坐标，y 上移 2px
+        panel.appendChild(this._ddFrame('ui_dlg_list'));
         const title = document.createElement('div');
-        title.style.cssText = 'position:absolute;left:19px;top:9px;font-size:12px;color:#fff;text-shadow:1px 1px 0 #000;white-space:nowrap;';
-        title.textContent = '物品列表';
+        title.style.cssText = 'position:absolute;left:36px;top:22px;font-size:15px;font-weight:bold;color:#ffd76a;text-shadow:1px 1px 0 #000;white-space:nowrap;';
+        title.textContent = '物品';
         panel.appendChild(title);
         const priceTitle = document.createElement('div');
-        priceTitle.style.cssText = 'position:absolute;left:156px;top:9px;font-size:12px;color:#fff;text-shadow:1px 1px 0 #000;white-space:nowrap;';
+        priceTitle.style.cssText = 'position:absolute;left:228px;top:22px;font-size:15px;font-weight:bold;color:#ffd76a;text-shadow:1px 1px 0 #000;white-space:nowrap;';
         priceTitle.textContent = '价格';
         panel.appendChild(priceTitle);
-        // 列表（y=30 起，保持当前位置，不挤标题）
         this.shopListEl = document.createElement('div');
-        this.shopListEl.style.cssText = 'position:absolute;left:19px;top:30px;width:270px;height:138px;'
-            + 'font-size:12px;line-height:13px;text-shadow:1px 1px 0 #000;';
+        this.shopListEl.style.cssText = 'position:absolute;left:28px;top:54px;width:' + (LW - 56) + 'px;height:' + (SHOP_ROWS * 28) + 'px;'
+            + 'font-size:14px;line-height:28px;text-shadow:1px 1px 0 #000;';
         panel.appendChild(this.shopListEl);
-        // 热区按钮（背景 385 已画正常态：箭头/买入/关闭；img 为按下态，按下显示抬起隐藏）
-        const mkBtn = (idx, x, y, w, h, cb) => {
-            const b = document.createElement('div');
-            b.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;cursor:pointer;`;
-            b.addEventListener('click', cb);
-            this._libUrl('prguse', idx).then((url) => {
-                if (url) {
-                    const im = document.createElement('img');
-                    im.src = url; im.draggable = false;
-                    im.style.cssText = 'visibility:hidden;display:block;';
-                    b.appendChild(im);
-                    b.addEventListener('mousedown', () => { im.style.visibility = 'visible'; });
-                    const restore = () => { im.style.visibility = 'hidden'; };
-                    b.addEventListener('mouseup', restore);
-                    b.addEventListener('mouseleave', restore);
-                }
-            });
-            panel.appendChild(b);
-        };
-        mkBtn(388, 43, 175, 24, 24, () => this._shopPageTurn(-9));
-        mkBtn(387, 90, 175, 24, 24, () => this._shopPageTurn(9));
-        mkBtn(386, 215, 171, 44, 16, () => this._buySelected(msg.npcId));
-        mkBtn(64, 291, 0, 16, 23, () => this._closeShopPanel());
+        panel.appendChild(this._ddButton('▲', 30, LH - 58, 56, 36, () => this._shopPageTurn(-SHOP_ROWS)));
+        panel.appendChild(this._ddButton('▼', 92, LH - 58, 56, 36, () => this._shopPageTurn(SHOP_ROWS)));
+        panel.appendChild(this._ddButton('买入', LW - 150, LH - 58, 120, 36, () => this._buySelected(msg.npcId)));
+        panel.appendChild(this._ddClose(LW - 50, 8, () => this._closeShopPanel()));
         gui.appendChild(panel);
         this._renderBuyList();
     }
@@ -2367,7 +2347,7 @@ export class PlayScene extends Scene {
     _renderBuyList() {
         if (!this.shopListEl) return;
         this.shopListEl.innerHTML = '';
-        const max = 10;
+        const max = SHOP_ROWS;
         const start = this.shopPage;
         const goods = this.shopGoods;
         for (let i = 0; i < max; i++) {
@@ -2375,16 +2355,17 @@ export class PlayScene extends Scene {
             if (idx >= goods.length) break;
             const g = goods[idx];
             const row = document.createElement('div');
-            row.style.cssText = `position:relative;height:13px;cursor:pointer;color:${idx === this.shopSel ? '#ff4444' : '#fff'};`;
-            row.innerHTML = `<span style="position:absolute;left:0;">${idx === this.shopSel ? '▶' : ''}${g.name}</span>`
-                + `<span style="position:absolute;left:137px;color:#fff;">${g.price}金币</span>`;
+            const sel = idx === this.shopSel;
+            row.style.cssText = 'position:relative;height:28px;cursor:pointer;border-radius:4px;color:' + (sel ? '#fff4c8' : '#efe3c4') + ';'
+                + (sel ? 'background:linear-gradient(90deg,rgba(200,162,74,.45),rgba(200,162,74,.08));' : '');
+            row.innerHTML = '<span style="position:absolute;left:8px;">' + g.name + '</span>'
+                + '<span style="position:absolute;left:200px;color:#ffd76a;">' + g.price + ' 金币</span>';
             row.addEventListener('click', () => { this.shopSel = idx; this._renderBuyList(); });
             this.shopListEl.appendChild(row);
         }
     }
 
     _shopPageTurn(delta) {
-        const max = 10;
         const np = this.shopPage + delta;
         if (np < 0) return;
         if (np >= this.shopGoods.length) return;
@@ -2402,27 +2383,22 @@ export class PlayScene extends Scene {
     _showSellDlg(msg) {
         this.shopSellItem = null;   // 选中要卖的物品
         const gui = this.manager.winManager.container;
+        // 打到天亮：照原版卖出框（投放格 + 卖出 + 关闭），换 GPT 底图 ui_dlg_sell，放在对话框下方
+        const SW = 210; const SH = 270; const dl = this.npcDlg ? this.npcDlg.offsetLeft : Math.round((SCREEN_WIDTH - 600) / 2);
         const panel = document.createElement('div');
-        panel.style.cssText = 'position:absolute;left:260px;top:176px;width:140px;height:181px;'
-            + 'pointer-events:auto;font-family:SimSun,serif;color:#e8d9b0;';
+        panel.className = 'dwin';
+        panel.style.cssText = 'position:absolute;left:' + dl + 'px;top:258px;width:' + SW + 'px;height:' + SH + 'px;'
+            + 'pointer-events:auto;font-family:"DDSerif","Microsoft YaHei",serif;color:#efe3c4;';
         this.shopPanel = panel;
         this._makeWindowDraggable(panel);
-        this._libUrl('prguse', 392).then((url) => {
-            if (url && this.shopPanel === panel) {
-                const bg = document.createElement('img');
-                bg.src = url; bg.draggable = false;
-                bg.style.cssText = 'position:absolute;left:0;top:0;';
-                panel.insertBefore(bg, panel.firstChild);
-            }
-        });
-        // 标题「卖: 价格」
+        panel.appendChild(this._ddFrame('ui_dlg_sell'));
         this.shopPriceEl = document.createElement('div');
-        this.shopPriceEl.style.cssText = 'position:absolute;left:8px;top:6px;font-size:12px;text-shadow:1px 1px 0 #000;';
+        this.shopPriceEl.style.cssText = 'position:absolute;left:26px;top:24px;width:' + (SW - 80) + 'px;font-size:14px;font-weight:bold;color:#ffd76a;text-shadow:1px 1px 0 #000;white-space:nowrap;overflow:hidden;';
         this.shopPriceEl.textContent = '卖: ';
         panel.appendChild(this.shopPriceEl);
-        // 投放框 Spot (27,67) 61x52：拿起物品后点这里放入要卖的物品
+        // 投放格：拿起物品后点这里放入要卖的物品
         const spot = document.createElement('div');
-        spot.style.cssText = 'position:absolute;left:27px;top:67px;width:61px;height:52px;'
+        spot.style.cssText = 'position:absolute;left:' + (SW / 2 - 36) + 'px;top:115px;width:72px;height:64px;'
             + 'display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;';
         spot.title = '拿起物品后点这里放入要卖的物品';
         spot.addEventListener('click', () => {
@@ -2433,36 +2409,51 @@ export class PlayScene extends Scene {
         });
         this.shopSpotEl = spot;
         panel.appendChild(spot);
-        // OK 按钮（原版 393 按下态，背景已画 OK）+ 关闭（背景已画红X）——热区模式
-        const mkBtn = (idx, x, y, w, h, cb) => {
-            const b = document.createElement('div');
-            b.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;cursor:pointer;`;
-            b.addEventListener('click', cb);
-            this._libUrl('prguse', idx).then((url) => {
-                if (url) {
-                    const im = document.createElement('img');
-                    im.src = url; im.draggable = false;
-                    im.style.cssText = 'visibility:hidden;display:block;';
-                    b.appendChild(im);
-                    b.addEventListener('mousedown', () => { im.style.visibility = 'visible'; });
-                    const restore = () => { im.style.visibility = 'hidden'; };
-                    b.addEventListener('mouseup', restore);
-                    b.addEventListener('mouseleave', restore);
-                }
-            });
-            panel.appendChild(b);
-        };
-        mkBtn(393, 85, 150, 24, 13, () => this._sellOk(msg.npcId));
-        mkBtn(64, 115, 0, 16, 23, () => this._closeShopPanel());
+        panel.appendChild(this._ddButton('卖出', SW / 2 - 60, SH - 64, 120, 38, () => this._sellOk(msg.npcId)));
+        panel.appendChild(this._ddClose(SW - 50, 8, () => this._closeShopPanel()));
         gui.appendChild(panel);
 
-        // 卖出模式：打开原版背包（右侧 475,0，原版 DItemBag 卖出位置），背包物品点击放入投放框
+        // 卖出模式：原版是在右边打开背包；这里在卖出框旁边放一个同样美术的背包格子，点物品放进投放格
         this.shopSellMode = true;
-        if (!this.bagPanel) this._buildBag();
-        this.bagPanel.style.display = 'block';
-        this.bagPanel.style.left = '475px';
-        this.bagPanel.style.top = '0px';
-        this._refreshBag();
+        const bag = document.createElement('div');
+        bag.className = 'dwin';
+        bag.style.cssText = 'position:absolute;left:' + (dl + SW + 8) + 'px;top:258px;width:380px;height:' + SH + 'px;pointer-events:auto;'
+            + 'font-family:"DDSerif","Microsoft YaHei",serif;color:#efe3c4;';
+        bag.appendChild(this._ddFrame('ui_dlg_list'));
+        const t = document.createElement('div');
+        t.style.cssText = 'position:absolute;left:30px;top:20px;font-size:14px;font-weight:bold;color:#ffd76a;text-shadow:1px 1px 0 #000;white-space:nowrap;';
+        t.textContent = '背包：点物品放进卖出格';
+        bag.appendChild(t);
+        this.shopBagGridEl = document.createElement('div');
+        this.shopBagGridEl.style.cssText = 'position:absolute;left:26px;top:52px;width:330px;height:' + (SH - 76) + 'px;overflow:hidden;';
+        bag.appendChild(this.shopBagGridEl);
+        this.shopBagListEl = bag;
+        gui.appendChild(bag);
+        this._renderSellBag();
+    }
+
+    // 卖出时的背包格子（6 列，每格物品图标 + 名字）
+    _renderSellBag() {
+        const el = this.shopBagGridEl; if (!el || !this.shopBagListEl) return;
+        el.innerHTML = '';
+        const items = (this.self && this.self.items) || [];
+        items.slice(0, 24).forEach((it, i) => {
+            const c = document.createElement('div');
+            const sel = this.shopSellItem && this.shopSellItem.makeIndex === it.makeIndex;
+            c.style.cssText = 'position:absolute;left:' + ((i % 6) * 55) + 'px;top:' + (Math.floor(i / 6) * 48) + 'px;width:51px;height:44px;cursor:pointer;'
+                + 'background:url(assets/ui/hud_slot.png) center/100% 100% no-repeat;' + (sel ? 'filter:brightness(1.5) sepia(.4);' : '');
+            c.title = it.name;
+            if (it.looks > 0) {
+                this._libUrl('items', it.looks).then((url) => {
+                    if (!url) return;
+                    const im = document.createElement('img'); im.src = url; im.draggable = false;
+                    im.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:36px;max-height:34px;pointer-events:none;';
+                    c.appendChild(im);
+                });
+            }
+            c.addEventListener('click', () => { this._pickSellItem(it); this._renderSellBag(); });
+            el.appendChild(c);
+        });
     }
 
     _pickSellItem(it) {
@@ -2496,6 +2487,7 @@ export class PlayScene extends Scene {
     _closeShopPanel() {
         if (this.shopPanel) { this.shopPanel.remove(); this.shopPanel = null; }
         if (this.shopBagListEl) { this.shopBagListEl.remove(); this.shopBagListEl = null; }
+        this.shopBagGridEl = null;
         this.shopGoldEl = null;
         this.shopSellMode = false;
         this.shopSellItem = null;
