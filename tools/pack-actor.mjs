@@ -104,9 +104,13 @@ async function writeAtlas(name, entries) {
 const [lib, ...args] = process.argv.slice(2);
 const entries = [];
 if (lib === 'hum') {
-  const [pre, range] = args; const [a, b] = (range || '0-0').split('-').map(Number);
-  const fr = await buildFrames(pre, HA, 84);
-  for (let ap = a; ap <= b; ap++) for (const [k, v] of Object.entries(fr)) entries.push([600 * ap + Number(k), v]);
+  // 用法：hum hw:0-1 hm:2-3 hs:4-5（每套图放进一段外观号）
+  for (const arg of args) {
+    const [pre, range] = arg.split(':'); const [a, b] = (range || '0-0').split('-').map(Number);
+    if (!existsSync(join(RAW, pre + '_stand_s.png')) && !existsSync(join(RAW, pre + '_stand_se.png'))) { console.log('还没有图', pre); continue; }
+    const fr = await buildFrames(pre, HA, 84);
+    for (let ap = a; ap <= b; ap++) for (const [k, v] of Object.entries(fr)) entries.push([600 * ap + Number(k), v]);
+  }
 } else {
   for (const arg of args) {
     const [pre, slot, h] = arg.split(':'); const fr = await buildFrames(pre, MA14, Number(h || 70));

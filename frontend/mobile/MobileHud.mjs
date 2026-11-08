@@ -2,6 +2,7 @@
 // 左下摇杆：拖动走路，推到外圈跑；右下：攻击（自动锁定最近的怪）、4 个技能、药水、拾取；
 // 点地图上的怪 → 锁定攻击，点 NPC → 对话。界面全部画在 canvas 上，风格：暗木铁框 + 金边。
 import { SCREEN_WIDTH as W, SCREEN_HEIGHT as H } from '../core/config.mjs';
+import { getLib } from '../image/Images.mjs';
 
 const DIR8 = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]]; // 0 上 … 7 左上
 const STICK_R = 62;
@@ -357,10 +358,20 @@ export class MobileHud {
             const x = x0 + i * (sw + gap); rr(ctx, x, y0, sw, sh, 4); ctx.fillStyle = 'rgba(10,8,6,.62)'; ctx.fill(); ctx.strokeStyle = 'rgba(200,162,74,.75)'; ctx.lineWidth = 1; ctx.stroke();
             const mi = (p.quickSlots || [])[i] || 0; const it = mi > 0 ? this._bagItem(mi) : null;
             ctx.font = '12px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            if (it) { ctx.fillStyle = /魔法/.test(it.name || '') ? '#8ab0ff' : '#ff8a7a'; ctx.fillText((it.name || '药').replace(/\(.*\)/, '').slice(0, 3), x + sw / 2, y0 + sh / 2 - 4); ctx.fillStyle = '#fff'; ctx.font = '11px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'right'; ctx.fillText(String(this._count(it.name)), x + sw - 4, y0 + sh - 8); }
+            if (it) {
+                const tex = it.looks != null ? this._itemTex(it.looks) : null;
+                if (tex) ctx.drawImage(tex.canvas, x + sw / 2 - 19, y0 + 2, 38, 38);
+                else { ctx.fillStyle = /魔法/.test(it.name || '') ? '#8ab0ff' : '#ff8a7a'; ctx.fillText((it.name || '药').replace(/\(.*\)/, '').slice(0, 3), x + sw / 2, y0 + sh / 2 - 4); }
+                ctx.font = 'bold 11px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'right'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; const n = String(this._count(it.name)); ctx.strokeText(n, x + sw - 3, y0 + sh - 7); ctx.fillStyle = '#fff'; ctx.fillText(n, x + sw - 3, y0 + sh - 7);
+            }
             else { ctx.fillStyle = 'rgba(200,180,140,.35)'; ctx.fillText(String(i + 1), x + sw / 2, y0 + sh / 2); }
             this.slots.push({ x, y: y0, w: sw, h: sh, i });
         }
+    }
+    _itemTex(looks) {
+        this._itex = this._itex || new Map(); if (this._itex.has(looks)) return this._itex.get(looks);
+        this._itex.set(looks, null); const lib = getLib('items'); if (lib) lib.getTexture(looks).then((t) => this._itex.set(looks, t)).catch(() => {});
+        return null;
     }
     _bagItem(mi) { const bag = this.scene.self.items || this.scene.bag || []; return (Array.isArray(bag) ? bag : Object.values(bag)).find((x) => x && x.makeIndex === mi) || { name: '药水' }; }
     _count(name) { const bag = this.scene.self.items || this.scene.bag || []; const arr = Array.isArray(bag) ? bag : Object.values(bag); return arr.filter((x) => x && x.name === name).length || 1; }

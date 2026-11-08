@@ -3,7 +3,7 @@
 
 import { Connection } from './net/Connection.mjs';
 import { SceneManager } from './scene/SceneManager.mjs';
-import { LoginScene } from './ui/LoginScene.mjs';
+import { DdEntryScene } from './ui/DdEntryScene.mjs';
 import { Loop } from './core/loop.mjs';
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from './core/config.mjs';
 import { DWinManager } from './gui/manager.mjs';
@@ -56,7 +56,7 @@ async function init() {
     console.log('[init] WebSocket 已连接');
 
     const sceneManager = new SceneManager(conn, ctx, winManager);
-    sceneManager.switchTo(new LoginScene(sceneManager));
+    sceneManager.switchTo(new DdEntryScene(sceneManager));
 
     const loop = new Loop(() => {
         sceneManager.update(performance.now());

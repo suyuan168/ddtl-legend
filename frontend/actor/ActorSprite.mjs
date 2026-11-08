@@ -89,7 +89,9 @@ export class ActorSprite {
             if (!wpord && weapon >= 2) {
                 layers.push(weaponLayer);
             }
-            layers.push({ lib: 'hum', index: A.HUMANFRAME * dress + cf });
+            // 打到天亮：外观按职业分（武者 0-1、术士 2-3、灵师 4-5，按性别），衣服换色以后再加
+            const look = e.job != null ? e.job * 2 + sex : dress;
+            layers.push({ lib: 'hum', index: A.HUMANFRAME * look + cf });
             if ((e.hair || 0) >= 1) {
                 layers.push({ lib: 'hair', index: A.HUMANFRAME * (e.hair * 2 + sex) + cf });
             }

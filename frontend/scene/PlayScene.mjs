@@ -2939,20 +2939,19 @@ export class PlayScene extends Scene {
             const sx = this.mapActor.screenX(g.x);
             const sy = this.mapActor.screenY(g.y);
             if (g.gold > 0) {
-                // 金币堆：黄色圆点（原版用金币袋图，暂用圆点）
-                ctx.fillStyle = '#fbbf24';
-                ctx.beginPath();
-                ctx.arc(sx + 24, sy + 16, 5, 0, Math.PI * 2);
-                ctx.fill();
+                this._drawDropTex(ctx, 9999, sx, sy);   // 打到天亮：金币堆图标（外观号 9999）
             } else if (g.looks > 0) {
                 // 物品：DnItems[looks] 图标（原版掉落物贴图）
                 this._drawDropTex(ctx, g.looks, sx, sy);
             }
             if (g.name) {
-                ctx.font = '11px SimSun,serif';
-                ctx.textAlign = 'center';
-                ctx.fillStyle = '#fff';
-                ctx.fillText(g.name, sx + 24, sy + 6);
+                ctx.font = '12px "Microsoft YaHei",sans-serif';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                const tw = ctx.measureText(g.name).width;
+                ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(sx + 24 - tw / 2 - 4, sy - 12, tw + 8, 16);
+                ctx.fillStyle = g.gold > 0 ? '#ffd84a' : '#f0e8d8';
+                ctx.fillText(g.name, sx + 24, sy - 4);
+                ctx.textBaseline = 'alphabetic';
             }
         }
     }
