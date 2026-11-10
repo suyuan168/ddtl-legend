@@ -1,13 +1,18 @@
-node_modules/
+# --- build artifacts ---
+target/
+dependency-reduced-pom.xml
+
+# --- runtime data ---
+data/
+gamedata/Mir200/Envir/GuildBase/
+
+# --- symlinked data (not versioned) ---
+resources
+gamedata/Mir200/Map
+
+# --- macOS ---
 .DS_Store
-._*
-.env
-.env.*
-*.log
-verification/*
-!verification/.gitkeep
-/assets/*
-!/assets/brand/
-/data/
-/.game-content-import-*/
-/.game-content-import.lock
+**/.DS_Store
+
+# --- 字体源文件太大，不进库（子集字体在 frontend/assets/fonts） ---
+art/fonts/*.otf

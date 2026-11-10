@@ -1,0 +1,687 @@
+package com.jootm2.server.game;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.jootm2.server.game.common.Ability;
+import com.jootm2.server.game.common.ExperienceTable;
+import com.jootm2.server.game.common.ItemInstance;
+import com.jootm2.server.game.common.ItemTemplate;
+import com.jootm2.server.game.common.MagicTemplate;
+import com.jootm2.server.game.common.MessageIds;
+import com.jootm2.server.game.common.Skill;
+import com.jootm2.server.service.PlayerSession;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * A logged-in or persisted human character. Combines the Delphi THuman/PlayerObject
+ * state with the account link introduced by the rewrite.
+ */
+public final class Player extends Actor {
+
+    // Base vitality per job (0 warrior, 1 wizard, 2 taoist).
+    private static final int[] BASE_HP = {26, 16, 18};
+    private static final int[] BASE_MP = {12, 20, 16};
+    private static final int[] BASE_DC = {2, 0, 1};
+    private static final int[] BASE_MC = {0, 2, 0};
+    private static final int[] BASE_SC = {0, 0, 2};
+    private static final int HP_GROWTH = 3;
+    private static final int MP_GROWTH = 2;
+
+    // 装备特殊 Shape 值（对齐 ObjBase.pas 的常量）
+    private static final int SHAPE_PARALYSIS_WEAPON = 23;
+    private static final int SHAPE_TELEPORT_RING = 112;
+    private static final int SHAPE_REVIVAL_RING = 114;
+    private static final int[] SHAPE_MANA_TO_HP = {133, 134, 135};   // 护身（戒指/手镯/项链）
+    private static final int[] SHAPE_SUCK_HEALTH = {136, 137, 138};  // 吸血（戒指/手镯/项链）
+    // 三职业套装（项链/手镯/戒指）
+    private static final int[] PSET_SHAPES = {153, 154, 155};        // 战士
+    private static final int[] HSET_SHAPES = {156, 157, 158};        // 法师
+    private static final int[] YSET_SHAPES = {159, 160, 161};        // 道士
+
+    public final long accountId;
+    public long characterId;
+    public int sex;
+    public int hair;
+    public int job;
+    public long gold;
+    public int pkPoint;
+    public int[] questParams = new int[1000];   // SET [n] task variables（MapQuest 旗标号可达 400+）
+
+    public int homeX;
+    public int homeY;
+    public String homeMap = "default";
+
+    public final Ability base = new Ability();
+    public final Ability combat = new Ability();
+    public final List<ItemInstance> bag = new ArrayList<>();
+    public final List<ItemInstance> storage = new ArrayList<>();   // 仓库（独立于背包）
+    public final ItemInstance[] equipment = new ItemInstance[13];
+    /**
+     * 药水快捷栏 6 格（原版客户端 ItemArr[0..5]）：存物品 makeIndex（0 = 空）。
+     * 物品本身仍在背包里，这里只是引用（原版客户端是本地移入药水格，服务端 ItemList 不变，吃药按 makeIndex 查背包）。
+     */
+    public final int[] quickSlots = new int[6];
+
+    // 装备衍生的特殊属性（recompute 时重算，语义对齐 ObjBase.pas 的 RecalcAbilitys）
+    public int luck = 0;                  // 幸运值（武器 SpecialPwr 1-10）
+    public int suckHealthRate = 0;        // 吸血比例（吸血装备 AniCount 之和，百分数）
+    public int manaToHealth = 0;          // 护身：MP 转 HP 的点数
+    public boolean paralysisWeapon = false;  // 麻痹武器（Shape=23）
+    public boolean revivalRing = false;      // 复活戒指（Shape=114）
+    public boolean teleportRing = false;     // 传送戒指（Shape=112）
+
+    /** Learned magics: magicId -> Skill (level + training points). */
+    public final Map<Integer, Skill> skills = new LinkedHashMap<>();
+    /** magicId -> last-cast timestamp (ms), for cast cooldown. */
+    public final Map<Integer, Long> skillCooldown = new LinkedHashMap<>();
+
+    /** 上次使用物品时间戳（ms），限制药水/卷轴等连续使用（对齐原版客户端 EatingItem 串行化）。 */
+    public long lastUseItemAt = 0;
+
+    /** 召唤物（宠物）的怪物 id，-1 表示无宠物。 */
+    public long summonId = -1;
+
+    /** 当前攻击目标 id（宠物据此协助攻击主人正在打的目标），-1 无。 */
+    public long targetId = -1;
+
+    /** 隐身术截止时间戳（ms），0 = 未隐身。 */
+    public long hideUntil = 0;
+
+    /** 治愈术累计待回血量（原版 IncHealing，每 tick 回 PerHealing=5 点直到用完）。 */
+    public int incHealing = 0;
+    /** 上次治愈回血时间戳（ms）。 */
+    public long lastHealingAt = 0;
+
+    /** 增益 buff：幽灵盾(14)/神圣战甲术(15) 加防御/魔御，截止时间戳。 */
+    public long acBuffUntil = 0;
+    public int acBuffBonus = 0;
+    public int macBuffBonus = 0;
+    /** 魔法盾(31) 减伤截止时间戳。 */
+    public long shieldUntil = 0;
+
+    /** 战士主动技能（对齐原版 ObjBase.pas：半月/刺杀是开关，烈火是蓄力；
+     *  攻杀剑术(7) 是纯被动 PPowerHitSkill，通过 powerHitCount/Point 计数触发，无开关）。 */
+    public boolean wideHitOn = false;    // 半月弯刀：攻击附带前方扇形（原版 BoAllowWideHit）
+    public boolean longHitOn = false;    // 刺杀剑术：攻击附带隔位刺杀（原版 BoAllowLongHit）
+    public boolean fireHitOn = false;    // 烈火剑法：蓄力，下次攻击伤害翻倍（原版 BoAllowFireHit）
+    public long lastFireHitAt = 0;       // 上次烈火蓄力时间戳（原版 LatestFireHitTime，10 秒冷却）
+    public long lastRushRushAt = 0;      // 上次野蛮冲撞时间戳（原版 LatestRushRushTime，3 秒冷却）
+    // 攻杀剑术(7) 被动触发计数（原版 AttackSkillCount/AttackSkillPointCount）
+    public int powerHitCount = 0;        // 剩余攻击计数（=7-Level，每次攻击递减；<=0 时重新初始化）
+    public int powerHitPoint = 0;        // 触发点（0..count-1 随机，命中即触发强力攻击）
+
+    /** 攻击模式：0=和平 1=全体 2=行会。默认全体（后续单独做模式判定）。 */
+    public int attackMode = 1;
+
+    public GameWorld world;
+    public PlayerSession session;
+
+    /** 当前视野内的实体 id（用于移动时增量广播 entityAdd/entityRemove）。 */
+    public final Set<Long> seen = new HashSet<>();
+
+    public Player(long id, long accountId) {
+        super(id);
+        this.accountId = accountId;
+        this.race = MessageIds.RC_USERHUMAN;
+    }
+
+    @Override
+    public boolean isPlayer() {
+        return true;
+    }
+
+    /** 衣服外观号（对齐 Delphi GetRelFeature：dress = 衣服 shape*2 + sex；无衣服 = sex）。 */
+    public int dressLooks() {
+        int shape = 0;
+        ItemInstance d = equipment[MessageIds.U_DRESS];
+        if (d != null && world != null) {
+            ItemTemplate t = world.itemTemplates.get(d.index);
+            if (t != null) shape = t.shape;
+        }
+        return shape * 2 + sex;
+    }
+
+    /** 武器外观号（对齐 Delphi GetRelFeature：weapon = 武器 shape*2 + sex；无武器 = sex）。 */
+    public int weaponShape() {
+        int shape = 0;
+        ItemInstance w = equipment[MessageIds.U_WEAPON];
+        if (w != null && world != null) {
+            ItemTemplate t = world.itemTemplates.get(w.index);
+            if (t != null) shape = t.shape;
+        }
+        return shape * 2 + sex;
+    }
+
+    @Override
+    public JsonObject toBriefJson() {
+        JsonObject o = super.toBriefJson();
+        o.addProperty("sex", sex);
+        o.addProperty("hair", hair);
+        o.addProperty("job", job);
+        o.addProperty("dress", dressLooks());
+        o.addProperty("weapon", weaponShape());
+        return o;
+    }
+
+    /** Re-derives maxHp/maxMp and the effective combat ability from job/level/gear. */
+    public void recompute(GameWorld world) {
+        combat.dcMin = BASE_DC[job];
+        combat.dcMax = BASE_DC[job];
+        combat.mcMin = BASE_MC[job];
+        combat.mcMax = BASE_MC[job];
+        combat.scMin = BASE_SC[job];
+        combat.scMax = BASE_SC[job];
+        combat.acMin = 0;
+        combat.acMax = 0;
+        combat.macMin = 0;
+        combat.macMax = 0;
+        combat.antiMagic = 1;      // 原版 AntiMagic := 1（基础 10%）
+        combat.antiPoison = 0;
+        combat.poisonRecover = 0;
+        combat.healthRecover = 0;
+        combat.spellRecover = 0;
+        combat.hitSpeed = 0;
+        combat.luck = 0;
+        combat.unluck = 0;
+        combat.hit = 0;            // 准确（每次重算从 0 起，否则重复 recompute 会累加）
+        combat.speed = 0;          // 敏捷
+
+        // 重置特殊属性
+        luck = 0;
+        suckHealthRate = 0;
+        manaToHealth = 0;
+        paralysisWeapon = false;
+        revivalRing = false;
+        teleportRing = false;
+        boolean[] pset = new boolean[3];   // 项链/手镯/戒指
+        boolean[] hset = new boolean[3];
+        boolean[] yset = new boolean[3];
+
+        int hpAdd = 0;
+        int mpAdd = 0;
+        for (ItemInstance it : equipment) {
+            if (it == null) {
+                continue;
+            }
+            ItemTemplate t = world.itemTemplates.get(it.index);
+            if (t == null) {
+                continue;
+            }
+            // AC/MAC 字段按 StdMode 映射成不同属性（对齐原版 ObjBase.pas ApplyItemParameters）：
+            //   武器 5/6   : AC=准确/幸运, MAC=攻速/诅咒
+            //   项链 19    : AC=魔躲, MAC=幸运/诅咒
+            //   项链/手镯 20/24 : AC=准确, MAC=敏捷
+            //   项链 21    : AC=回血, MAC=回蓝, 攻速
+            //   戒指 23    : AC=毒抗, MAC=解毒, 攻速
+            //   宝石 53    : HP/MP 加成
+            //   其余(衣服/头盔/腰带/靴子/护身符/戒指22/手套26…) : AC/MAC 即防御
+            switch (t.stdMode) {
+                case 5:
+                case 6:
+                    combat.hit += t.acMax;                 // Hibyte(AC)
+                    combat.luck += t.acMin;                // Lobyte(AC)
+                    combat.unluck += t.macMin;             // Lobyte(MAC)
+                    if (t.macMax > 10) {
+                        combat.hitSpeed += t.macMax - 10;  // 攻速 (+)
+                    } else {
+                        combat.hitSpeed -= t.macMax;       // 攻速 (-)
+                    }
+                    break;
+                case 19:
+                    combat.antiMagic += t.acMax;
+                    combat.unluck += t.macMin;
+                    combat.luck += t.macMax;
+                    break;
+                case 20:
+                case 24:
+                    combat.hit += t.acMax;
+                    combat.speed += t.macMax;
+                    break;
+                case 21:
+                    combat.healthRecover += t.acMax;
+                    combat.spellRecover += t.macMax;
+                    combat.hitSpeed += t.acMin - t.macMin;
+                    break;
+                case 23:
+                    combat.antiPoison += t.acMax;
+                    combat.poisonRecover += t.macMax;
+                    combat.hitSpeed += t.acMin - t.macMin;
+                    break;
+                case 53:
+                    hpAdd += t.hpAdd;
+                    mpAdd += t.mpAdd;
+                    break;
+                default:
+                    combat.acMin += t.acMin;
+                    combat.acMax += t.acMax;
+                    combat.macMin += t.macMin;
+                    combat.macMax += t.macMax;
+                    break;
+            }
+            // DC/MC/SC 所有类型都累加（原版 ApplyItemParameters 末尾统一加）
+            combat.dcMin += t.dcMin;
+            combat.dcMax += t.dcMax;
+            combat.mcMin += t.mcMin;
+            combat.mcMax += t.mcMax;
+            combat.scMin += t.scMin;
+            combat.scMax += t.scMax;
+
+            // 特殊属性（Shape 值）
+            if (t.shape == SHAPE_PARALYSIS_WEAPON) {
+                paralysisWeapon = true;
+            }
+            if (t.shape == SHAPE_TELEPORT_RING) {
+                teleportRing = true;
+            }
+            if (t.shape == SHAPE_REVIVAL_RING) {
+                revivalRing = true;
+            }
+            if (contains(SHAPE_MANA_TO_HP, t.shape)) {
+                manaToHealth += t.aniCount;
+            }
+            if (contains(SHAPE_SUCK_HEALTH, t.shape)) {
+                suckHealthRate += t.aniCount;
+            }
+            // 套装标记
+            markSet(PSET_SHAPES, pset, t.shape);
+            markSet(HSET_SHAPES, hset, t.shape);
+            markSet(YSET_SHAPES, yset, t.shape);
+        }
+
+        // 幸运：武器模板 specialPwr + 实例 lucky（祝福油提升）
+        ItemInstance w = equipment[MessageIds.U_WEAPON];
+        if (w != null) {
+            ItemTemplate wt = world.itemTemplates.get(w.index);
+            int base = (wt != null && wt.specialPwr >= 1 && wt.specialPwr <= 10) ? wt.specialPwr : 0;
+            luck = Math.min(10, base + w.lucky);
+        }
+
+        // 套装加成（手镯+戒指 为基础，项链为加成）
+        if (pset[1] && pset[2]) {
+            combat.hit += 1;                       // HitSpeed +1
+            if (pset[0]) { combat.dcMin += 1; combat.dcMax += 3; }
+        }
+        if (hset[1] && hset[2]) {
+            if (hset[0]) { combat.mcMin += 1; combat.mcMax += 2; }
+        }
+        if (yset[1] && yset[2]) {
+            if (yset[0]) { combat.scMin += 1; combat.scMax += 2; }
+        }
+
+        // 增益 buff（幽灵盾/神圣战甲术）：未过期则加防御/魔御上限（原版只加 Hibyte(AC/MAC)）
+        long now = System.currentTimeMillis();
+        if (acBuffUntil > now) {
+            combat.acMax += acBuffBonus;
+            combat.macMax += macBuffBonus;
+        }
+
+        maxHp = BASE_HP[job] + hpAdd + (level - 1) * HP_GROWTH;
+        maxMp = BASE_MP[job] + mpAdd + (level - 1) * MP_GROWTH;
+        hp = Math.max(0, Math.min(hp, maxHp));
+        mp = Math.max(0, Math.min(mp, maxMp));
+    }
+
+    private static boolean contains(int[] arr, int v) {
+        for (int x : arr) {
+            if (x == v) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void markSet(int[] shapes, boolean[] set, int shape) {
+        for (int i = 0; i < shapes.length; i++) {
+            if (shapes[i] == shape) {
+                set[i] = true;
+            }
+        }
+    }
+
+    /**
+     * Splits persisted items into equipment slots vs the bag.
+     * 只有落盘时带槽位标记（slot >= 0，见 GameService.toRecord）的物品才回到对应装备槽；
+     * 其余一律留在背包，避免"取下装备后重登又被自动穿上"。
+     */
+    public void distributeItems(GameWorld world) {
+        List<ItemInstance> remain = new ArrayList<>();
+        for (ItemInstance it : bag) {
+            int wanted = it.slot;
+            it.slot = -1;
+            ItemTemplate t = world.itemTemplates.get(it.index);
+            if (t != null && wanted >= 0 && wanted < equipment.length
+                    && equipment[wanted] == null && slotAccepts(wanted, t.stdMode)) {
+                equipment[wanted] = it;
+            } else {
+                remain.add(it);
+            }
+        }
+        bag.clear();
+        bag.addAll(remain);
+    }
+
+    /**
+     * Maps a stdMode to the equipment slot used by "auto" take-on.
+     * 对齐原版 ClFunc.pas GetTakeOnPosition（戒指先占左、手镯/手套先占右）。
+     */
+    public static int slotFor(ItemTemplate t) {
+        switch (t.stdMode) {
+            case 5:
+            case 6:
+                return MessageIds.U_WEAPON;
+            case 10:
+            case 11:
+                return MessageIds.U_DRESS;
+            case 15:
+                return MessageIds.U_HELMET;
+            case 19:
+            case 20:
+            case 21:
+                return MessageIds.U_NECKLACE;
+            case 24:
+            case 26:
+                return MessageIds.U_ARMRINGR;
+            case 22:
+            case 23:
+                return MessageIds.U_RINGL;
+            case 30:
+                return MessageIds.U_RIGHTHAND;   // 蜡烛/火把/勋章
+            case 25:
+                return MessageIds.U_BUJUK;       // 护身符/符
+            case 52:
+                return MessageIds.U_BOOTS;
+            case 54:
+                return MessageIds.U_BELT;
+            case 53:
+                return MessageIds.U_CHARM;
+            default:
+                return -1;
+        }
+    }
+
+    /**
+     * 该装备槽能否收纳此类物品（对齐原版 M2Share.pas IsTakeOnAvailable）。
+     * 注意与原版一致：头盔槽只收 StdMode=15；左手腕槽额外接受 25（护身符）。
+     */
+    public static boolean slotAccepts(int slot, int stdMode) {
+        switch (slot) {
+            case MessageIds.U_DRESS:
+                return stdMode == 10 || stdMode == 11;
+            case MessageIds.U_WEAPON:
+                return stdMode == 5 || stdMode == 6;
+            case MessageIds.U_RIGHTHAND:
+                return stdMode == 30;
+            case MessageIds.U_NECKLACE:
+                return stdMode == 19 || stdMode == 20 || stdMode == 21;
+            case MessageIds.U_HELMET:
+                return stdMode == 15;
+            case MessageIds.U_ARMRINGL:
+                return stdMode == 24 || stdMode == 25 || stdMode == 26;
+            case MessageIds.U_ARMRINGR:
+                return stdMode == 24 || stdMode == 26;
+            case MessageIds.U_RINGL:
+            case MessageIds.U_RINGR:
+                return stdMode == 22 || stdMode == 23;
+            case MessageIds.U_BUJUK:
+                return stdMode == 25;
+            case MessageIds.U_BELT:
+                return stdMode == 54;
+            case MessageIds.U_BOOTS:
+                return stdMode == 52;
+            case MessageIds.U_CHARM:
+                return stdMode == 53;
+            default:
+                return false;
+        }
+    }
+
+    /** 腕力上限（原版 WAbil.MaxHandWeight）：只用于武器/右手槽。 */
+    public int maxHandWeight() {
+        int mhwDiv = job == 0 ? 13 : (job == 1 ? 90 : 42);
+        return Math.min(255, 12 + (level / mhwDiv) * level);
+    }
+
+    /** 已穿装备重量合计（原版 WAbil.WearWeight：武器/右手除外）。 */
+    public int wearWeight() {
+        int w = 0;
+        for (int i = 0; i < equipment.length; i++) {
+            if (i == MessageIds.U_WEAPON || i == MessageIds.U_RIGHTHAND) {
+                continue;
+            }
+            ItemInstance it = equipment[i];
+            if (it == null) {
+                continue;
+            }
+            ItemTemplate t = world != null ? world.itemTemplates.get(it.index) : null;
+            if (t != null) {
+                w += t.weight;
+            }
+        }
+        return w;
+    }
+
+    /** 持在手上的重量（原版 WAbil.HandWeight：武器/右手）。 */
+    public int handWeight() {
+        int w = 0;
+        for (int i : new int[]{MessageIds.U_WEAPON, MessageIds.U_RIGHTHAND}) {
+            ItemInstance it = equipment[i];
+            if (it == null) {
+                continue;
+            }
+            ItemTemplate t = world != null ? world.itemTemplates.get(it.index) : null;
+            if (t != null) {
+                w += t.weight;
+            }
+        }
+        return w;
+    }
+
+    /** 负重上限（原版 WAbil.MaxWearWeight）：武器/右手以外的装备槽。 */
+    public int maxWearWeight() {
+        int mwwDiv = job == 0 ? 20 : (job == 1 ? 100 : 50);
+        return 15 + (level / mwwDiv) * level;
+    }
+
+    /**
+     * 已穿装备的重量合计（原版 TCreature.CalcWearWeightEx）：
+     * 统计时始终排除武器与右手槽，并排除 excludeSlot（本次要换上的槽位）。
+     */
+    public int wearWeightEx(GameWorld world, int excludeSlot) {
+        int w = 0;
+        for (int i = 0; i < equipment.length; i++) {
+            if (i == MessageIds.U_WEAPON || i == MessageIds.U_RIGHTHAND) {
+                continue;
+            }
+            if (excludeSlot >= 0 && i == excludeSlot) {
+                continue;
+            }
+            ItemInstance it = equipment[i];
+            if (it == null) {
+                continue;
+            }
+            ItemTemplate t = world != null ? world.itemTemplates.get(it.index) : null;
+            if (t != null) {
+                w += t.weight;
+            }
+        }
+        return w;
+    }
+
+    public JsonObject toPlayerJson(GameWorld world) {
+        JsonObject o = new JsonObject();
+        o.addProperty("id", id);
+        o.addProperty("name", name);
+        o.addProperty("type", "player");
+        o.addProperty("sex", sex);
+        o.addProperty("hair", hair);
+        o.addProperty("job", job);
+        o.addProperty("level", level);
+        o.addProperty("exp", exp);
+        o.addProperty("x", x);
+        o.addProperty("y", y);
+        o.addProperty("dir", dir);
+        o.addProperty("hp", hp);
+        o.addProperty("maxHp", maxHp);
+        o.addProperty("mp", mp);
+        o.addProperty("maxMp", maxMp);
+        o.addProperty("gold", gold);
+        o.addProperty("race", race);
+        o.addProperty("appr", appr);
+        o.addProperty("dress", dressLooks());
+        o.addProperty("weapon", weaponShape());
+        // 战斗属性（F9 状态窗口显示，原版 DStateWin 的 AC/MAC/DC/MC/SC）
+        o.addProperty("ac", combat.acMin + "-" + combat.acMax);
+        o.addProperty("mac", combat.macMin + "-" + combat.macMax);
+        o.addProperty("dc", combat.dcMin + "-" + combat.dcMax);
+        o.addProperty("mc", combat.mcMin + "-" + combat.mcMax);
+        o.addProperty("sc", combat.scMin + "-" + combat.scMax);
+        // 属性数值页（原版 DStateWin StatePage=2）字段：经验/负重/命中/敏捷
+        o.addProperty("maxExp", ExperienceTable.expForLevel(level));
+        int bagWeight = 0;
+        for (ItemInstance it : bag) {
+            ItemTemplate t = world != null ? world.itemTemplates.get(it.index) : null;
+            if (t != null) bagWeight += t.weight;
+        }
+        int mwDiv = job == 0 ? 3 : (job == 1 ? 5 : 4);
+        o.addProperty("weight", bagWeight);
+        o.addProperty("maxWeight", 50 + (level / mwDiv) * level);
+        o.addProperty("wearWeight", wearWeight());
+        o.addProperty("maxWearWeight", maxWearWeight());
+        o.addProperty("handWeight", handWeight());
+        o.addProperty("maxHandWeight", maxHandWeight());
+        o.addProperty("hit", combat.hit);
+        o.addProperty("speed", combat.speed);
+        o.add("skills", skillsJson(world));
+        o.add("items", itemsJson(world));
+        // 药水快捷栏 6 格（原版 ItemArr[0..5]），无效引用下发 0
+        JsonArray qs = new JsonArray();
+        for (int i = 0; i < quickSlots.length; i++) {
+            qs.add(quickSlotValid(i) ? quickSlots[i] : 0);
+        }
+        o.add("quickSlots", qs);
+        return o;
+    }
+
+    /** 已学技能：{magicId: {name, level, key, effectType}}，供客户端技能栏显示与快捷键施法。 */
+    public JsonObject skillsJson(GameWorld world) {
+        JsonObject o = new JsonObject();
+        for (Map.Entry<Integer, Skill> e : skills.entrySet()) {
+            MagicTemplate mt = world != null ? world.magicTemplates.get(e.getKey()) : null;
+            JsonObject s = new JsonObject();
+            s.addProperty("name", mt != null ? mt.name : String.valueOf(e.getKey()));
+            s.addProperty("level", e.getValue().level);
+            s.addProperty("key", e.getValue().key);
+            s.addProperty("effectType", mt != null ? mt.effectType : 0);   // 0=被动
+            s.addProperty("effect", mt != null ? mt.effect : 0);           // 技能图标 id（MagIcon[Effect*2]）
+            o.add(String.valueOf(e.getKey()), s);
+        }
+        return o;
+    }
+
+    // ---- 药水快捷栏（原版客户端 ItemArr[0..5]，服务端只存 makeIndex 引用）----
+
+    /** 快捷栏 → 持久化列表（6 个 makeIndex，0 = 空）。 */
+    public List<Integer> quickSlotList() {
+        List<Integer> list = new ArrayList<>(quickSlots.length);
+        for (int v : quickSlots) {
+            list.add(v);
+        }
+        return list;
+    }
+
+    /** 从持久化列表恢复快捷栏（同一 makeIndex 只保留第一处，兼容旧存档里的重复引用）。 */
+    public void loadQuickSlots(List<Integer> list) {
+        java.util.Arrays.fill(quickSlots, 0);
+        if (list == null) {
+            return;
+        }
+        for (int i = 0; i < quickSlots.length && i < list.size(); i++) {
+            Integer v = list.get(i);
+            int mi = v == null ? 0 : v;
+            if (mi <= 0) {
+                continue;
+            }
+            boolean dup = false;
+            for (int j = 0; j < i; j++) {
+                if (quickSlots[j] == mi) {
+                    dup = true;
+                    break;
+                }
+            }
+            quickSlots[i] = dup ? 0 : mi;
+        }
+    }
+
+    /** 背包里按 makeIndex 找物品（找不到返回 null）。 */
+    public ItemInstance bagItem(int makeIndex) {
+        for (ItemInstance it : bag) {
+            if (it.makeIndex == makeIndex) {
+                return it;
+            }
+        }
+        return null;
+    }
+
+    /** 物品离开背包（用掉/丢弃/卖出）时清掉快捷栏对它的引用。 */
+    public void clearQuickRef(int makeIndex) {
+        if (makeIndex <= 0) {
+            return;
+        }
+        for (int i = 0; i < quickSlots.length; i++) {
+            if (quickSlots[i] == makeIndex) {
+                quickSlots[i] = 0;
+            }
+        }
+    }
+
+    /** 快捷栏某格是否还有效（有引用且物品仍在背包）。 */
+    public boolean quickSlotValid(int slot) {
+        return slot >= 0 && slot < quickSlots.length && quickSlots[slot] > 0 && bagItem(quickSlots[slot]) != null;
+    }
+
+    public JsonArray itemsJson(GameWorld world) {
+        JsonArray arr = new JsonArray();
+        for (ItemInstance it : bag) {
+            arr.add(instanceJson(world, it));
+        }
+        for (int slot = 0; slot < equipment.length; slot++) {
+            ItemInstance it = equipment[slot];
+            if (it != null) {
+                JsonObject e = instanceJson(world, it);
+                e.addProperty("slot", slot);
+                arr.add(e);
+            }
+        }
+        return arr;
+    }
+
+    private JsonObject instanceJson(GameWorld world, ItemInstance it) {
+        ItemTemplate t = world.itemTemplates.get(it.index);
+        JsonObject o = it.toJson(t == null ? "?" : t.name, t == null ? 0 : t.looks);
+        if (t != null) {
+            // 物品描述所需属性（原版 GetMouseItemInfo 用的字段）
+            o.addProperty("stdMode", t.stdMode);
+            o.addProperty("shape", t.shape);
+            o.addProperty("weight", t.weight);
+            o.addProperty("dc", t.dcMin);
+            o.addProperty("dcMax", t.dcMax);
+            o.addProperty("mc", t.mcMin);
+            o.addProperty("mcMax", t.mcMax);
+            o.addProperty("sc", t.scMin);
+            o.addProperty("scMax", t.scMax);
+            o.addProperty("ac", t.acMin);
+            o.addProperty("acMax", t.acMax);
+            o.addProperty("mac", t.macMin);
+            o.addProperty("macMax", t.macMax);
+            o.addProperty("need", t.need);
+            o.addProperty("needLevel", t.needLevel);
+        }
+        return o;
+    }
+}

@@ -1,0 +1,10 @@
+; 脚本 地图 x y 名字 朝向 外观
+dd_weapon dtw 10 9 铁匠·巴隆 3 900
+dd_armor dta 10 9 甲胄师·赛拉 3 901
+dd_potion dtp 10 9 药师·老林 3 902
+dd_store dts 10 9 杂货商·福德 3 903
+dd_storage dtk 10 9 仓库管理员·莫恩 3 904
+dd_potion dt0 32 49 药贩·小禾 3 902
+dd_weapon dt0 48 49 兵器贩·铁头 3 900
+dd_storage dt0 33 64 保管员·阿杜 3 904
+dd_guide dt0 44 42 向导·艾琳 3 905
